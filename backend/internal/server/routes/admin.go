@@ -1,4 +1,4 @@
-﻿// Package routes provides HTTP route registration and handlers.
+// Package routes provides HTTP route registration and handlers.
 package routes
 
 import (
@@ -9,7 +9,8 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// RegisterAdminRoutes 娉ㄥ唽绠＄悊鍛樿矾鐢?func RegisterAdminRoutes(
+// RegisterAdminRoutes 娉ㄥ唽绠＄悊鍛樿矾鐢?
+func RegisterAdminRoutes(
 	v1 *gin.RouterGroup,
 	h *handler.Handlers,
 	adminAuth middleware.AdminAuthMiddleware,
@@ -22,9 +23,11 @@ import (
 	// 瀹¤涓棿浠舵寕鍦ㄨ璇佷箣鍚庯細鎵€鏈夌鐞嗛潰鍙樻洿绫绘搷浣?+ 鏁忔劅璇诲彇鍏ュ璁℃棩蹇?	admin.Use(gin.HandlerFunc(auditLog))
 	admin.Use(middleware.AdminComplianceGuard(settingService))
 	{
-		// 閮ㄧ讲涓庤繍钀ュ悎瑙勭‘璁?		registerAdminComplianceRoutes(admin, h)
+		// 閮ㄧ讲涓庤繍钀ュ悎瑙勭‘璁?
+		registerAdminComplianceRoutes(admin, h)
 
-		// 浠〃鐩?		registerDashboardRoutes(admin, h)
+		// 浠〃鐩?
+		registerDashboardRoutes(admin, h)
 
 		// 鐢ㄦ埛绠＄悊
 		registerUserManagementRoutes(admin, h)
@@ -56,7 +59,8 @@ import (
 		// 鍗″瘑绠＄悊
 		registerRedeemCodeRoutes(admin, h)
 
-		// 浼樻儬鐮佺鐞?		registerPromoCodeRoutes(admin, h)
+		// 浼樻儬鐮佺鐞?
+		registerPromoCodeRoutes(admin, h)
 
 		// 绯荤粺璁剧疆
 		registerSettingsRoutes(admin, h)
@@ -64,9 +68,11 @@ import (
 		// 鏁版嵁绠＄悊
 		registerDataManagementRoutes(admin, h, stepUpAuth)
 
-		// 鏁版嵁搴撳浠芥仮澶?		registerBackupRoutes(admin, h, stepUpAuth)
+		// 鏁版嵁搴撳浠芥仮澶?
+		registerBackupRoutes(admin, h, stepUpAuth)
 
-		// 杩愮淮鐩戞帶锛圤ps锛?		registerOpsRoutes(admin, h)
+		// 杩愮淮鐩戞帶锛圤ps锛?
+		registerOpsRoutes(admin, h)
 
 		// 绯荤粺绠＄悊
 		registerSystemRoutes(admin, h)
@@ -77,7 +83,8 @@ import (
 		// 浣跨敤璁板綍绠＄悊
 		registerUsageRoutes(admin, h)
 
-		// 鐢ㄦ埛灞炴€х鐞?		registerUserAttributeRoutes(admin, h)
+		// 鐢ㄦ埛灞炴€х鐞?
+		registerUserAttributeRoutes(admin, h)
 
 		// 閿欒閫忎紶瑙勫垯绠＄悊
 		registerErrorPassthroughRoutes(admin, h)
@@ -100,7 +107,8 @@ import (
 		// 椋庢帶涓績
 		registerContentModerationRoutes(admin, h)
 
-		// 閭€璇疯繑鍒╋紙涓撳睘鐢ㄦ埛绠＄悊锛?		registerAffiliateRoutes(admin, h)
+		// 閭€璇疯繑鍒╋紙涓撳睘鐢ㄦ埛绠＄悊锛?
+		registerAffiliateRoutes(admin, h)
 
 		// 鎿嶄綔瀹¤鏃ュ織
 		registerAuditLogRoutes(admin, h, stepUpAuth)
@@ -691,7 +699,8 @@ func registerChannelMonitorRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
 	}
 }
 
-// registerAffiliateRoutes 娉ㄥ唽閭€璇疯繑鍒╃殑绠＄悊绔矾鐢憋紙涓撳睘鐢ㄦ埛閰嶇疆锛?func registerAffiliateRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
+// registerAffiliateRoutes 娉ㄥ唽閭€璇疯繑鍒╃殑绠＄悊绔矾鐢憋紙涓撳睘鐢ㄦ埛閰嶇疆锛?
+func registerAffiliateRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
 	affiliates := admin.Group("/affiliates")
 	{
 		affiliates.GET("/invites", h.Admin.Affiliate.ListInviteRecords)
