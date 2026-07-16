@@ -226,9 +226,22 @@ Nginx drops headers containing underscores by default (e.g. `session_id`), which
 
 ### One-click (pull only)
 
+Same as official Docker: **AUTO_SETUP, no setup wizard**. Script prints admin email/password; open `http://SERVER_IP:8080` to login.
+
 ```bash
 curl -sSL https://raw.githubusercontent.com/gthubtom1/sub2api-standby/main/deploy/quick-pull-deploy.sh | bash
 ```
+
+Details: [docs/DEPLOY_STANDY_CN.md](docs/DEPLOY_STANDY_CN.md).
+
+Or manually:
+
+```bash
+mkdir -p sub2api-standby && cd sub2api-standby
+docker pull ghcr.io/gthubtom1/sub2api-standby:latest
+docker compose up -d
+```
+
 
 ### Upgrade
 
