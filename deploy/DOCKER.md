@@ -1,3 +1,7 @@
+# Sub2API Standby image notes
+
+Use image `sub2api-custom:0.1.157-standby` built from this fork. Do not pull official Hub images.
+
 # Sub2API Docker Image
 
 Sub2API is an AI API Gateway Platform for distributing and managing AI product subscription API quotas.
@@ -10,7 +14,7 @@ docker run -d \
   -p 8080:8080 \
   -e DATABASE_URL="postgres://user:pass@host:5432/sub2api" \
   -e REDIS_URL="redis://host:6379" \
-  weishaw/sub2api:latest
+  sub2api-custom:0.1.157-standby
 ```
 
 ## Docker Compose
@@ -20,7 +24,7 @@ version: '3.8'
 
 services:
   sub2api:
-    image: weishaw/sub2api:latest
+    image: sub2api-custom:0.1.157-standby
     ports:
       - "8080:8080"
     environment:
@@ -72,5 +76,5 @@ volumes:
 
 ## Links
 
-- [GitHub Repository](https://github.com/weishaw/sub2api)
-- [Documentation](https://github.com/weishaw/sub2api#readme)
+- [GitHub Repository](https://github.com/sub2api-custom:0.1.157-standby)
+- [Documentation](https://github.com/sub2api-custom:0.1.157-standby#readme)

@@ -12,7 +12,7 @@
 
 services:
   sub2api:
-    image: weishaw/sub2api:latest
+    image: sub2api-custom:0.1.157-standby
     container_name: sub2api
     restart: unless-stopped
     ulimits:
