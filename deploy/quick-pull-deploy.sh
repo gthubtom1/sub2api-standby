@@ -1,10 +1,8 @@
-# =============================================================================
-# Sub2API Standby - one-click pull & deploy (NO source build on server)
-# First run opens Setup Wizard at http://SERVER_IP:8080 (or /setup).
-# Do NOT set AUTO_SETUP=true unless you intentionally skip the wizard.
+#!/usr/bin/env bash
+# Sub2API Standby - one-click pull & deploy (official Docker style: AUTO_SETUP)
+# No Setup Wizard. After up, open http://SERVER_IP:8080 and login.
 # Usage:
 #   curl -sSL https://raw.githubusercontent.com/gthubtom1/sub2api-standby/main/deploy/quick-pull-deploy.sh | bash
-# =============================================================================
 set -euo pipefail
 
 REPO="gthubtom1/sub2api-standby"
@@ -36,33 +34,32 @@ if [[ ! -f docker-compose.yml ]]; then
   curl -fsSL "$RAW/.env.example" -o .env.example
 fi
 
-# Always prefer wizard mode for first-run UX
-if grep -q 'AUTO_SETUP=true' docker-compose.yml 2>/dev/null; then
-  sed -i 's/AUTO_SETUP=true/AUTO_SETUP=false/' docker-compose.yml || true
-fi
-
 if [[ ! -f .env ]]; then
   info "Generating .env secrets..."
   cp .env.example .env
   chmod 600 .env
   gen() { openssl rand -hex 32; }
+  gen_pass() { openssl rand -base64 18 | tr -d '=+/' | cut -c1-20; }
   if command -v openssl >/dev/null 2>&1; then
-    grep -q '^POSTGRES_PASSWORD=' .env || echo "POSTGRES_PASSWORD=$(gen)" >> .env
-    grep -q '^JWT_SECRET=' .env || echo "JWT_SECRET=$(gen)" >> .env
-    grep -q '^TOTP_ENCRYPTION_KEY=' .env || echo "TOTP_ENCRYPTION_KEY=$(gen)" >> .env
     sed -i "s/^POSTGRES_PASSWORD=$/POSTGRES_PASSWORD=$(gen)/" .env || true
     sed -i "s/^POSTGRES_PASSWORD=your_.*/POSTGRES_PASSWORD=$(gen)/" .env || true
     sed -i "s/^JWT_SECRET=$/JWT_SECRET=$(gen)/" .env || true
     sed -i "s/^JWT_SECRET=your_.*/JWT_SECRET=$(gen)/" .env || true
     sed -i "s/^TOTP_ENCRYPTION_KEY=$/TOTP_ENCRYPTION_KEY=$(gen)/" .env || true
     sed -i "s/^TOTP_ENCRYPTION_KEY=your_.*/TOTP_ENCRYPTION_KEY=$(gen)/" .env || true
+    # ensure admin password exists
+    if ! grep -q '^ADMIN_PASSWORD=' .env || grep -q '^ADMIN_PASSWORD=$' .env || grep -q '^ADMIN_PASSWORD=your_' .env; then
+      if grep -q '^ADMIN_PASSWORD=' .env; then
+        sed -i "s/^ADMIN_PASSWORD=.*/ADMIN_PASSWORD=$(gen_pass)/" .env
+      else
+        echo "ADMIN_PASSWORD=$(gen_pass)" >> .env
+      fi
+    fi
+    if ! grep -q '^ADMIN_EMAIL=' .env; then
+      echo "ADMIN_EMAIL=admin@sub2api.local" >> .env
+    fi
   else
     warn "openssl missing; edit .env manually"
-  fi
-  if ! grep -q '^AUTO_SETUP=' .env; then
-    echo "AUTO_SETUP=false" >> .env
-  else
-    sed -i 's/^AUTO_SETUP=.*/AUTO_SETUP=false/' .env || true
   fi
 fi
 
@@ -75,45 +72,38 @@ if grep -q 'image:' docker-compose.yml; then
   sed -i "0,/image:.*/s|image:.*|image: ${IMAGE}|" docker-compose.yml || true
 fi
 
-info "Starting stack..."
+# ensure official auto setup
+sed -i 's/AUTO_SETUP=false/AUTO_SETUP=true/' docker-compose.yml 2>/dev/null || true
+
+info "Starting stack (AUTO_SETUP, no wizard)..."
 docker compose -f docker-compose.yml --env-file .env up -d
 
-info "Waiting for setup wizard / app..."
+info "Waiting for app..."
 for i in $(seq 1 40); do
-  if curl -fsS http://127.0.0.1:8080/setup/status >/dev/null 2>&1; then
+  code=$(curl -sS -m 3 -o /dev/null -w '%{http_code}' http://127.0.0.1:8080/ 2>/dev/null || echo 000)
+  if [ "$code" = "200" ] || [ "$code" = "302" ]; then
     echo
-    info "SETUP WIZARD READY"
-    break
-  fi
-  if curl -fsS http://127.0.0.1:8080/ >/dev/null 2>&1; then
-    echo
-    info "APP RESPONDING"
+    info "APP READY"
     break
   fi
   sleep 3
 done
 
 docker compose -f docker-compose.yml ps
-
-PG_USER=$(grep -E '^POSTGRES_USER=' .env 2>/dev/null | head -1 | cut -d= -f2- || echo sub2api)
-PG_DB=$(grep -E '^POSTGRES_DB=' .env 2>/dev/null | head -1 | cut -d= -f2- || echo sub2api)
+ADMIN_EMAIL=$(grep -E '^ADMIN_EMAIL=' .env | head -1 | cut -d= -f2- || echo admin@sub2api.local)
+ADMIN_PASSWORD=$(grep -E '^ADMIN_PASSWORD=' .env | head -1 | cut -d= -f2- || echo)
 
 cat <<EOF
 
 ========================================
-Sub2API Standby is up (pull-only deploy)
+Sub2API Standby is up (official Docker style)
 URL:   http://SERVER_IP:8080
-Setup: http://SERVER_IP:8080/setup
 Dir:   $DIR
 Image: $IMAGE
 
-First visit = Setup Wizard (design your install).
-In wizard, fill Docker network defaults:
-  PostgreSQL host: postgres   port: 5432
-  user: ${PG_USER:-sub2api}   db: ${PG_DB:-sub2api}
-  password: (value of POSTGRES_PASSWORD in $DIR/.env)
-  Redis host: redis   port: 6379   password: (empty unless set)
-Then create YOUR admin email + password (must be a real email format).
+Login (auto-created, no setup wizard):
+  Email:    ${ADMIN_EMAIL}
+  Password: ${ADMIN_PASSWORD}
 
 Do NOT use Admin UI "Update" (pulls official binaries).
 Upgrade later (keeps data):

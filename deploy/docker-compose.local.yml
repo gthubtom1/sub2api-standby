@@ -43,7 +43,7 @@ services:
       # =======================================================================
       # Auto Setup (REQUIRED for Docker deployment)
       # =======================================================================
-      - AUTO_SETUP=false
+      - AUTO_SETUP=true
 
       # =======================================================================
       # Server Configuration
@@ -80,9 +80,9 @@ services:
       - REDIS_ENABLE_TLS=${REDIS_ENABLE_TLS:-false}
 
       # =======================================================================
-      # Admin Account (only used when AUTO_SETUP=true; leave empty for Setup Wizard)
+      # Admin Account (auto-created on first run; use a valid email format)
       # =======================================================================
-      - ADMIN_EMAIL=${ADMIN_EMAIL:-}
+      - ADMIN_EMAIL=${ADMIN_EMAIL:-admin@sub2api.local}
       - ADMIN_PASSWORD=${ADMIN_PASSWORD:-}
 
       # =======================================================================
@@ -189,7 +189,7 @@ services:
   # PostgreSQL Database
   # ===========================================================================
   postgres:
-    image: postgres:18-alpine
+    image: postgres:16-alpine
     container_name: sub2api-postgres
     restart: unless-stopped
     ulimits:
@@ -220,7 +220,7 @@ services:
   # Redis Cache
   # ===========================================================================
   redis:
-    image: redis:8-alpine
+    image: redis:7-alpine
     container_name: sub2api-redis
     restart: unless-stopped
     ulimits:

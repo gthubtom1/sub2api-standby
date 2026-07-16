@@ -35,7 +35,7 @@ docker compose up -d
 
 ---
 
-## 首次安装：必须走安装向导
+## 首次安装：官方 Docker 自动安装（无需向导）
 
 本 fork 的 deploy/docker-compose.local.yml 默认 **AUTO_SETUP=false**。
 
