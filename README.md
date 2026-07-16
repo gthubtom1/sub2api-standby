@@ -221,46 +221,27 @@ Nginx drops headers containing underscores by default (e.g. `session_id`), which
 
 ## Deployment
 
-> **This repo is the fork `gthubtom1/sub2api-standby`.**  
-> Full guide: **[docs/DEPLOY_STANDY_EN.md](docs/DEPLOY_STANDY_EN.md)** / **[中文](docs/DEPLOY_STANDY_CN.md)**  
-> Commands below are fork-only. **No official install entrypoints.**
+> Fork: `gthubtom1/sub2api-standby` · Image: `ghcr.io/gthubtom1/sub2api-standby:latest`  
+> Guide: [docs/DEPLOY_STANDY_EN.md](docs/DEPLOY_STANDY_EN.md) / [中文](docs/DEPLOY_STANDY_CN.md)
 
-### Warnings
-
-- **Do not** use Admin UI **Check for Updates / Update** (pulls official `Wei-Shaw/sub2api` binaries)
-- **Do not** use official image `weishaw/sub2api` or official curl installers from `Wei-Shaw/sub2api`
-- Upgrade only via this repo + `Dockerfile.custom`
-
-### Recommended: Docker build from source
+### One-click (pull only)
 
 ```bash
-git clone https://github.com/gthubtom1/sub2api-standby.git
-cd sub2api-standby
-export DOCKER_BUILDKIT=1
-docker build --memory=2g --build-arg VERSION=0.1.157-standby \
-  -f Dockerfile.custom -t sub2api-custom:0.1.157-standby .
-cd deploy
-cp .env.example .env && chmod 600 .env
-mkdir -p data postgres_data redis_data
-docker compose -f docker-compose.local.yml up -d
-```
-
-### One-click compose file prep (this fork only)
-
-```bash
-mkdir -p sub2api-deploy && cd sub2api-deploy
-curl -sSL https://raw.githubusercontent.com/gthubtom1/sub2api-standby/main/deploy/docker-deploy.sh | bash
-docker compose -f docker-compose.local.yml up -d
+curl -sSL https://raw.githubusercontent.com/gthubtom1/sub2api-standby/main/deploy/quick-pull-deploy.sh | bash
 ```
 
 ### Upgrade
 
 ```bash
-git pull
-docker build --memory=2g --build-arg VERSION=0.1.157-standby \
-  -f Dockerfile.custom -t sub2api-custom:0.1.157-standby .
-# recreate container / compose up -d
+docker pull ghcr.io/gthubtom1/sub2api-standby:latest
+docker compose up -d
 ```
+
+### Never
+
+- In-app Update (official)
+- `weishaw/sub2api`
+- Source build on tiny VPS
 
 ---
 

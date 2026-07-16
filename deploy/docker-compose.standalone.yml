@@ -12,7 +12,7 @@
 
 services:
   sub2api:
-    image: sub2api-custom:0.1.157-standby
+    image: ghcr.io/gthubtom1/sub2api-standby:latest
     container_name: sub2api
     restart: unless-stopped
     ulimits:

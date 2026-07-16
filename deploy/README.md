@@ -1,11 +1,8 @@
 # Sub2API Standby Deployment Files
 
-This directory is for the **fork** `gthubtom1/sub2api-standby` only.
-
-- Full Chinese guide: [../docs/DEPLOY_STANDY_CN.md](../docs/DEPLOY_STANDY_CN.md)
-- Full English guide: [../docs/DEPLOY_STANDY_EN.md](../docs/DEPLOY_STANDY_EN.md)
-- Image: `sub2api-custom:0.1.157-standby`
-- **Never** use official `gthubtom1/sub2api-standby` / `sub2api-custom:0.1.157-standby` / in-app Update.
+- Image: `ghcr.io/gthubtom1/sub2api-standby:latest`
+- One-click: [`quick-pull-deploy.sh`](./quick-pull-deploy.sh) (docker pull only)
+- Docs: [../docs/DEPLOY_STANDY_CN.md](../docs/DEPLOY_STANDY_CN.md)
 
 ## Deployment Methods
 
