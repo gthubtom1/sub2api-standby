@@ -35,6 +35,31 @@ docker compose up -d
 
 ---
 
+## 首次安装：必须走安装向导
+
+本 fork 的 deploy/docker-compose.local.yml 默认 **AUTO_SETUP=false**。
+
+1. 打开 http://你的IP:8080 或 /setup
+2. 向导里填写（Docker 内网默认值）：
+   - PostgreSQL：host=postgres port=5432 user=sub2api db=sub2api password= 看部署目录 .env 里的 POSTGRES_PASSWORD
+   - Redis：host=redis port=6379 密码一般为空
+3. **自己创建管理员**：邮箱必须是合法 email（不要用 dmin@local），密码自设
+4. 安装完成后才会进入后台登录
+
+不要用 AUTO_SETUP=true + 非法邮箱跳过向导，否则会装完却登不进去。
+
+若误开了 AUTO_SETUP 想重来：
+`ash
+cd /path/to/deploy
+docker compose down
+# 会清空数据
+rm -rf data postgres_data redis_data
+mkdir -p data postgres_data redis_data
+# 确认 compose 里 AUTO_SETUP=false
+docker compose up -d
+`
+
+
 ## 镜像从哪来
 
 GitHub Actions 工作流：`.github/workflows/ghcr-image.yml`

@@ -1,7 +1,10 @@
-#!/usr/bin/env bash
+# =============================================================================
 # Sub2API Standby - one-click pull & deploy (NO source build on server)
+# First run opens Setup Wizard at http://SERVER_IP:8080 (or /setup).
+# Do NOT set AUTO_SETUP=true unless you intentionally skip the wizard.
 # Usage:
 #   curl -sSL https://raw.githubusercontent.com/gthubtom1/sub2api-standby/main/deploy/quick-pull-deploy.sh | bash
+# =============================================================================
 set -euo pipefail
 
 REPO="gthubtom1/sub2api-standby"
@@ -33,6 +36,11 @@ if [[ ! -f docker-compose.yml ]]; then
   curl -fsSL "$RAW/.env.example" -o .env.example
 fi
 
+# Always prefer wizard mode for first-run UX
+if grep -q 'AUTO_SETUP=true' docker-compose.yml 2>/dev/null; then
+  sed -i 's/AUTO_SETUP=true/AUTO_SETUP=false/' docker-compose.yml || true
+fi
+
 if [[ ! -f .env ]]; then
   info "Generating .env secrets..."
   cp .env.example .env
@@ -51,6 +59,11 @@ if [[ ! -f .env ]]; then
   else
     warn "openssl missing; edit .env manually"
   fi
+  if ! grep -q '^AUTO_SETUP=' .env; then
+    echo "AUTO_SETUP=false" >> .env
+  else
+    sed -i 's/^AUTO_SETUP=.*/AUTO_SETUP=false/' .env || true
+  fi
 fi
 
 mkdir -p data postgres_data redis_data
@@ -65,29 +78,45 @@ fi
 info "Starting stack..."
 docker compose -f docker-compose.yml --env-file .env up -d
 
-info "Waiting for health..."
+info "Waiting for setup wizard / app..."
 for i in $(seq 1 40); do
-  if curl -fsS http://127.0.0.1:8080/health >/dev/null 2>&1; then
+  if curl -fsS http://127.0.0.1:8080/setup/status >/dev/null 2>&1; then
     echo
-    info "HEALTH OK"
+    info "SETUP WIZARD READY"
+    break
+  fi
+  if curl -fsS http://127.0.0.1:8080/ >/dev/null 2>&1; then
+    echo
+    info "APP RESPONDING"
     break
   fi
   sleep 3
 done
 
 docker compose -f docker-compose.yml ps
-docker exec sub2api /app/sub2api --version 2>/dev/null || true
+
+PG_USER=$(grep -E '^POSTGRES_USER=' .env 2>/dev/null | head -1 | cut -d= -f2- || echo sub2api)
+PG_DB=$(grep -E '^POSTGRES_DB=' .env 2>/dev/null | head -1 | cut -d= -f2- || echo sub2api)
 
 cat <<EOF
 
 ========================================
 Sub2API Standby is up (pull-only deploy)
-URL:  http://SERVER_IP:8080
-Dir:  $DIR
+URL:   http://SERVER_IP:8080
+Setup: http://SERVER_IP:8080/setup
+Dir:   $DIR
 Image: $IMAGE
 
+First visit = Setup Wizard (design your install).
+In wizard, fill Docker network defaults:
+  PostgreSQL host: postgres   port: 5432
+  user: ${PG_USER:-sub2api}   db: ${PG_DB:-sub2api}
+  password: (value of POSTGRES_PASSWORD in $DIR/.env)
+  Redis host: redis   port: 6379   password: (empty unless set)
+Then create YOUR admin email + password (must be a real email format).
+
 Do NOT use Admin UI "Update" (pulls official binaries).
-Upgrade later:
+Upgrade later (keeps data):
   cd $DIR && docker pull $IMAGE && docker compose up -d
 ========================================
 EOF

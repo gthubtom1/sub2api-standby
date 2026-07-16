@@ -1,4 +1,4 @@
-# =============================================================================
+﻿# =============================================================================
 # Sub2API Docker Compose - Local Directory Version
 # =============================================================================
 # This configuration uses local directories for data storage instead of named
@@ -43,7 +43,7 @@ services:
       # =======================================================================
       # Auto Setup (REQUIRED for Docker deployment)
       # =======================================================================
-      - AUTO_SETUP=true
+      - AUTO_SETUP=false
 
       # =======================================================================
       # Server Configuration
@@ -80,9 +80,9 @@ services:
       - REDIS_ENABLE_TLS=${REDIS_ENABLE_TLS:-false}
 
       # =======================================================================
-      # Admin Account (auto-created on first run)
+      # Admin Account (only used when AUTO_SETUP=true; leave empty for Setup Wizard)
       # =======================================================================
-      - ADMIN_EMAIL=${ADMIN_EMAIL:-admin@sub2api.local}
+      - ADMIN_EMAIL=${ADMIN_EMAIL:-}
       - ADMIN_PASSWORD=${ADMIN_PASSWORD:-}
 
       # =======================================================================
@@ -148,7 +148,7 @@ services:
       - SECURITY_URL_ALLOWLIST_UPSTREAM_HOSTS=${SECURITY_URL_ALLOWLIST_UPSTREAM_HOSTS:-}
 
       # =======================================================================
-      # Update Configuration (在线更新配置)
+      # Update Configuration (鍦ㄧ嚎鏇存柊閰嶇疆)
       # =======================================================================
       # Proxy for accessing GitHub (online updates + pricing data)
       # Examples: http://host:port, socks5://host:port
@@ -213,8 +213,8 @@ services:
       timeout: 5s
       retries: 5
       start_period: 10s
-    # 注意：不暴露端口到宿主机，应用通过内部网络连接
-    # 如需调试，可临时添加：ports: ["127.0.0.1:5433:5432"]
+    # 娉ㄦ剰锛氫笉鏆撮湶绔彛鍒板涓绘満锛屽簲鐢ㄩ€氳繃鍐呴儴缃戠粶杩炴帴
+    # 濡傞渶璋冭瘯锛屽彲涓存椂娣诲姞锛歱orts: ["127.0.0.1:5433:5432"]
 
   # ===========================================================================
   # Redis Cache
@@ -256,3 +256,4 @@ services:
 networks:
   sub2api-network:
     driver: bridge
+
