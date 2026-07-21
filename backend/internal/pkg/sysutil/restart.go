@@ -66,7 +66,7 @@ func DockerHotUpdateConfigured() bool {
 	if _, err := os.Stat("/var/run/docker.sock"); err != nil {
 		return false
 	}
-	if _, err := exec.LookPath("docker"); err != nil {
+	if dockerBin() == "" {
 		return false
 	}
 	return true
@@ -107,7 +107,7 @@ func DockerPullLatest() (bool, error) {
 		return false, fmt.Errorf("docker hot-update not configured")
 	}
 	image := dockerUpdateImage()
-	cmd := exec.Command("docker", "pull", image)
+	cmd := exec.Command(dockerBin(), "pull", image)
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
@@ -140,7 +140,7 @@ func RecreateDockerService() error {
 		"--no-deps",
 		service,
 	}
-	cmd := exec.Command("docker", args...)
+	cmd := exec.Command(dockerBin(), args...)
 	cmd.Dir = dir
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
@@ -150,6 +150,19 @@ func RecreateDockerService() error {
 		return fmt.Errorf("docker compose recreate failed: %w; output: %s", err, truncateOut(out, 800))
 	}
 	return nil
+}
+
+
+func dockerBin() string {
+	for _, candidate := range []string{"docker", "/usr/local/bin/docker", "/usr/bin/docker"} {
+		if path, err := exec.LookPath(candidate); err == nil {
+			return path
+		}
+		if st, err := os.Stat(candidate); err == nil && !st.IsDir() {
+			return candidate
+		}
+	}
+	return ""
 }
 
 func truncateOut(s string, max int) string {
