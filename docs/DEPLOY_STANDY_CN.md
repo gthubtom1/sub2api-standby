@@ -101,3 +101,13 @@ A: 看部署目录 `.env` 的 `ADMIN_EMAIL` / `ADMIN_PASSWORD`，一键脚本结
 
 **Q: 和官方有什么区别？**  
 A: 部署方式一样简单；镜像是本 fork（含预备健康探测等），不要用官方更新按钮。
+
+## 管理后台一键热更新
+
+部署 compose 需挂载：
+
+- `/var/run/docker.sock`
+- 部署目录到 `/opt/sub2api-standby`（只读即可）
+
+并设置 `UPDATE_DOCKER_ENABLED=true`。之后在后台点「立即更新」→「立即重启」即可，无需 SSH。
+

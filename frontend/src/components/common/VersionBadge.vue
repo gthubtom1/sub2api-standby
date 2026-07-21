@@ -307,10 +307,11 @@
                   >{{ dockerHotUpdateCommand }}</pre>
                   <button
                     type="button"
-                    class="mt-2 flex w-full items-center justify-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-emerald-700"
+                    :disabled="updating"
+                    class="mt-2 flex w-full items-center justify-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
                     @click="handleUpdate"
                   >
-                    {{ copied ? t('version.copied') : t('version.copyHotUpdate') }}
+                    {{ updating ? t('version.updating') : t('version.updateNow') }}
                   </button>
                   <a
                     :href="`https://github.com/${GITHUB_REPO}`"
@@ -675,6 +676,7 @@ import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore, useAppStore } from '@/stores'
 import {
+  performUpdate,
   restartService,
   getRollbackVersions,
   rollback as rollbackAPI,
@@ -793,17 +795,37 @@ async function refreshVersion(force = true) {
 }
 
 async function handleUpdate() {
-  // Binary in-app update is disabled for the standby fork (would risk official binaries).
-  // Copy Docker hot-update commands for the operator to run on the host.
+  if (updating.value) return
+
+  updating.value = true
   updateError.value = ''
   updateSuccess.value = false
+
   try {
-    await copyToClipboard(dockerHotUpdateCommand.value)
+    // One-click: backend pulls GHCR image via docker.sock, then user clicks Restart
+    // which force-recreates the compose service on the new image.
+    const result = await performUpdate()
     successKind.value = 'update'
+    if ((result as { already_up_to_date?: boolean }).already_up_to_date) {
+      updateSuccess.value = true
+      needRestart.value = false
+      await appStore.fetchVersion(true)
+      return
+    }
     updateSuccess.value = true
-    needRestart.value = false
-  } catch {
-    updateError.value = t('version.updateFailed')
+    needRestart.value = result.need_restart !== false
+    appStore.clearVersionCache()
+  } catch (error: unknown) {
+    const err = error as { response?: { data?: { message?: string } }; message?: string }
+    const msg = err.response?.data?.message || err.message || t('version.updateFailed')
+    updateError.value = msg
+    try {
+      await copyToClipboard(dockerHotUpdateCommand.value)
+    } catch {
+      /* ignore */
+    }
+  } finally {
+    updating.value = false
   }
 }
 

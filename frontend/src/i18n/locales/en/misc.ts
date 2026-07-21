@@ -32,7 +32,7 @@ export default {
     sourceMode: 'Source Build',
     sourceModeHint: 'Source build, use git pull to update',
     dockerHotUpdateTitle: 'Docker hot-update (this fork)',
-    dockerHotUpdateHint: 'Do not use the official in-app binary update. Run these commands on the VPS to pull the fork image:',
+    dockerHotUpdateHint: 'Click Update Now to pull the fork image, then Restart. If docker.sock is not mounted, run manually:',
     copyHotUpdate: 'Copy hot-update command',
     updateNow: 'Update Now',
     updating: 'Updating...',

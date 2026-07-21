@@ -32,7 +32,7 @@ export default {
     sourceMode: '源码构建',
     sourceModeHint: '源码构建请使用 git pull 更新',
     dockerHotUpdateTitle: 'Docker 热更新（本仓库）',
-    dockerHotUpdateHint: '不要点官方更新。在 VPS 上执行下面命令即可热更新二改镜像（数据不丢）：',
+    dockerHotUpdateHint: '点「立即更新」自动 pull 二改镜像；完成后点「立即重启」。若未挂载 docker.sock，可手动执行：',
     copyHotUpdate: '复制热更新命令',
     updateNow: '立即更新',
     updating: '正在更新...',

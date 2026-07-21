@@ -42,7 +42,10 @@ export async function checkUpdates(force = false): Promise<VersionInfo> {
 
 export interface UpdateResult {
   message: string
-  need_restart: boolean
+  need_restart?: boolean
+  already_up_to_date?: boolean
+  current_version?: string
+  latest_version?: string
 }
 
 export interface RollbackVersionInfo {

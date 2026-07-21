@@ -23,6 +23,8 @@ services:
       - "${BIND_HOST:-0.0.0.0}:${SERVER_PORT:-8080}:8080"
     volumes:
       - sub2api_data:/app/data
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /opt/sub2api-standby:/opt/sub2api-standby:ro
     extra_hosts:
       - "host.docker.internal:host-gateway"
     environment:
@@ -30,6 +32,10 @@ services:
       # Auto Setup
       # =======================================================================
       - AUTO_SETUP=true
+      - UPDATE_DOCKER_ENABLED=true
+      - UPDATE_DOCKER_IMAGE=ghcr.io/gthubtom1/sub2api-standby:latest
+      - UPDATE_DOCKER_COMPOSE_DIR=/opt/sub2api-standby
+      - UPDATE_DOCKER_SERVICE=sub2api
 
       # =======================================================================
       # Server Configuration

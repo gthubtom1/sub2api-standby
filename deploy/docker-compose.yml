@@ -28,6 +28,9 @@ services:
     volumes:
       # Data persistence (config.yaml will be auto-generated here)
       - sub2api_data:/app/data
+      # One-click hot-update via host Docker
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /opt/sub2api-standby:/opt/sub2api-standby:ro
       # Optional: Mount custom config.yaml (uncomment and create the file first)
       # Copy config.example.yaml to config.yaml, modify it, then uncomment:
       # - ./config.yaml:/app/data/config.yaml
@@ -40,6 +43,10 @@ services:
       # Auto Setup (REQUIRED for Docker deployment)
       # =======================================================================
       - AUTO_SETUP=true
+      - UPDATE_DOCKER_ENABLED=true
+      - UPDATE_DOCKER_IMAGE=ghcr.io/gthubtom1/sub2api-standby:latest
+      - UPDATE_DOCKER_COMPOSE_DIR=/opt/sub2api-standby
+      - UPDATE_DOCKER_SERVICE=sub2api
 
       # =======================================================================
       # Server Configuration

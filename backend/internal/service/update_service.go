@@ -170,8 +170,11 @@ func (s *UpdateService) CheckUpdate(ctx context.Context, force bool) (*UpdateInf
 // PerformUpdate downloads and applies the update
 // Uses atomic file replacement pattern for safe in-place updates
 func (s *UpdateService) PerformUpdate(ctx context.Context) error {
-	// This fork is distributed as a prebuilt GHCR image. Never download/replace
-	// the binary in-place from GitHub Releases (that path is for official installs).
+	// Standby fork: one-click update pulls GHCR image via host Docker socket.
+	// Never download official Wei-Shaw release binaries into the container.
+	if dockerUpdateConfigured() {
+		return s.performDockerHotUpdate(ctx)
+	}
 	return ErrDockerUpdateOnly
 }
 
