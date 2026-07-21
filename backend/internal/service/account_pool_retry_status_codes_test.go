@@ -146,6 +146,24 @@ func TestIsPoolModeRetryableStatus_Account(t *testing.T) {
 			expected:   true,
 		},
 		{
+			name: "custom_list_with_429_still_false",
+			account: &Account{
+				Credentials: map[string]any{
+					"pool_mode_retry_status_codes": []any{float64(429), float64(401)},
+				},
+			},
+			statusCode: 429,
+			expected:   false,
+		},
+		{
+			name: "unconfigured_default_excludes_429",
+			account: &Account{
+				Credentials: map[string]any{"pool_mode": true},
+			},
+			statusCode: 429,
+			expected:   false,
+		},
+		{
 			name: "unconfigured_uses_default_502_false",
 			account: &Account{
 				Credentials: map[string]any{"pool_mode": true},

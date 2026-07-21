@@ -284,7 +284,7 @@ func (h *OpenAIGatewayHandler) handleGrokMedia(c *gin.Context, endpoint service.
 					h.handleFailoverExhausted(c, failoverErr, false)
 					return
 				}
-				if failoverErr.RetryableOnSameAccount {
+				if failoverErr.RetryableOnSameAccount && failoverErr.StatusCode != http.StatusTooManyRequests {
 					retryLimit := account.GetPoolModeRetryCount()
 					if sameAccountRetryCount[account.ID] < retryLimit {
 						sameAccountRetryCount[account.ID]++

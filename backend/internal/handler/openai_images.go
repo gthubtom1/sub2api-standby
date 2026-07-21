@@ -285,7 +285,7 @@ func (h *OpenAIGatewayHandler) Images(c *gin.Context) {
 						)
 						return
 					}
-					if failoverErr.RetryableOnSameAccount {
+					if failoverErr.RetryableOnSameAccount && failoverErr.StatusCode != http.StatusTooManyRequests {
 						retryLimit := account.GetPoolModeRetryCount()
 						if sameAccountRetryCount[account.ID] < retryLimit {
 							sameAccountRetryCount[account.ID]++

@@ -69,7 +69,7 @@
       <div
         class="pointer-events-none absolute bottom-full left-1/2 z-50 mb-2 w-56 -translate-x-1/2 whitespace-normal rounded bg-gray-900 px-3 py-2 text-center text-xs leading-relaxed text-white opacity-0 transition-opacity group-hover:opacity-100 dark:bg-gray-700"
       >
-        {{ t('admin.accounts.status.rateLimitedUntil', { time: formatDateTime(account.rate_limit_reset_at) }) }}
+        {{ t('admin.accounts.status.rateLimitedUntil', { time: formatDateTime(earliestRateLimitResetAt || account.rate_limit_reset_at) }) }}
         <div
           class="absolute left-1/2 top-full -translate-x-1/2 border-4 border-transparent border-t-gray-900 dark:border-t-gray-700"
         ></div>
@@ -171,10 +171,22 @@ const emit = defineEmits<{
   (e: 'show-temp-unsched', account: Account): void
 }>()
 
-// Computed: is rate limited (429)
+// Computed: is rate limited (429) — account-level OR any active model_rate_limits.
+// Matches admin list "限流" so Grok soft per-model 429 leaves "正常".
 const isRateLimited = computed(() => {
-  if (!props.account.rate_limit_reset_at) return false
-  return new Date(props.account.rate_limit_reset_at) > new Date()
+  const now = new Date()
+  if (props.account.rate_limit_reset_at && new Date(props.account.rate_limit_reset_at) > now) {
+    return true
+  }
+  const extra = props.account.extra as Record<string, unknown> | undefined
+  const modelLimits = extra?.model_rate_limits as
+    | Record<string, { rate_limit_reset_at?: string }>
+    | undefined
+  if (!modelLimits) return false
+  return Object.values(modelLimits).some((info) => {
+    if (!info?.rate_limit_reset_at) return false
+    return new Date(info.rate_limit_reset_at) > now
+  })
 })
 
 type AccountModelStatusItem = {
@@ -299,9 +311,31 @@ const isQuotaExceeded = computed(() => {
   )
 })
 
+// Earliest reset among account-level and active model-level rate limits.
+const earliestRateLimitResetAt = computed((): string | null => {
+  const now = Date.now()
+  let earliest: number | null = null
+  if (props.account.rate_limit_reset_at) {
+    const ts = new Date(props.account.rate_limit_reset_at).getTime()
+    if (ts > now) earliest = ts
+  }
+  const extra = props.account.extra as Record<string, unknown> | undefined
+  const modelLimits = extra?.model_rate_limits as
+    | Record<string, { rate_limit_reset_at?: string }>
+    | undefined
+  if (modelLimits) {
+    for (const info of Object.values(modelLimits)) {
+      if (!info?.rate_limit_reset_at) continue
+      const ts = new Date(info.rate_limit_reset_at).getTime()
+      if (ts > now && (earliest == null || ts < earliest)) earliest = ts
+    }
+  }
+  return earliest == null ? null : new Date(earliest).toISOString()
+})
+
 // Computed: countdown text for rate limit (429)
 const rateLimitCountdown = computed(() => {
-  return formatCountdown(props.account.rate_limit_reset_at)
+  return formatCountdown(earliestRateLimitResetAt.value)
 })
 
 const rateLimitResumeText = computed(() => {

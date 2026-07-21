@@ -469,7 +469,7 @@ func TestAntigravityGatewayService_Forward_ModelRateLimitTriggersFailover(t *tes
 		httpUpstream:  &httpUpstreamStub{resp: nil, err: nil},
 	}
 
-	// 设置模型限流：剩余时间 30 秒（> antigravityRateLimitThreshold 7s）
+	// 设置模型限流：剩余时间 30 秒（> antigravityRateLimitThreshold 3s）
 	futureResetAt := time.Now().Add(30 * time.Second).Format(time.RFC3339)
 	account := &Account{
 		ID:          1,
@@ -526,7 +526,7 @@ func TestAntigravityGatewayService_ForwardGemini_ModelRateLimitTriggersFailover(
 		httpUpstream:  &httpUpstreamStub{resp: nil, err: nil},
 	}
 
-	// 设置模型限流：剩余时间 30 秒（> antigravityRateLimitThreshold 7s）
+	// 设置模型限流：剩余时间 30 秒（> antigravityRateLimitThreshold 3s）
 	futureResetAt := time.Now().Add(30 * time.Second).Format(time.RFC3339)
 	account := &Account{
 		ID:          2,
@@ -581,7 +581,7 @@ func TestAntigravityGatewayService_Forward_StickySessionForceCacheBilling(t *tes
 		httpUpstream:  &httpUpstreamStub{resp: nil, err: nil},
 	}
 
-	// 设置模型限流：剩余时间 30 秒（> antigravityRateLimitThreshold 7s）
+	// 设置模型限流：剩余时间 30 秒（> antigravityRateLimitThreshold 3s）
 	futureResetAt := time.Now().Add(30 * time.Second).Format(time.RFC3339)
 	account := &Account{
 		ID:          3,
@@ -637,7 +637,7 @@ func TestAntigravityGatewayService_ForwardGemini_StickySessionForceCacheBilling(
 		httpUpstream:  &httpUpstreamStub{resp: nil, err: nil},
 	}
 
-	// 设置模型限流：剩余时间 30 秒（> antigravityRateLimitThreshold 7s）
+	// 设置模型限流：剩余时间 30 秒（> antigravityRateLimitThreshold 3s）
 	futureResetAt := time.Now().Add(30 * time.Second).Format(time.RFC3339)
 	account := &Account{
 		ID:          4,

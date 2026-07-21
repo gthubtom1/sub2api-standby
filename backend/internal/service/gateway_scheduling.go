@@ -174,15 +174,19 @@ func (s *GatewayService) SelectAccountWithLoadAwareness(ctx context.Context, gro
 				continue
 			}
 
-			if stickyAccountID > 0 && stickyAccountID == account.ID && s.concurrencyService != nil {
-				waitingCount, _ := s.concurrencyService.GetAccountWaitingCount(ctx, account.ID)
-				if waitingCount < cfg.StickySessionMaxWaiting {
-					return s.newSelectionResult(ctx, account, false, nil, &AccountWaitPlan{
-						AccountID:      account.ID,
-						MaxConcurrency: account.Concurrency,
-						Timeout:        cfg.StickySessionWaitTimeout,
-						MaxWaiting:     cfg.StickySessionMaxWaiting,
-					})
+			// Sticky concurrency full: prefer another account. If this is the only
+			// schedulable account, fall through to a short FallbackWaitTimeout wait.
+			if stickyAccountID > 0 && stickyAccountID == account.ID {
+				if _, tried := localExcluded[account.ID]; !tried {
+					if s.cache != nil && sessionHash != "" {
+						_ = s.cache.DeleteSessionAccountID(ctx, derefGroupID(groupID), sessionHash)
+					}
+					localExcluded[account.ID] = struct{}{}
+					alt, altErr := s.SelectAccountForModelWithExclusions(ctx, groupID, sessionHash, requestedModel, localExcluded)
+					if altErr == nil && alt != nil && alt.ID != account.ID {
+						continue
+					}
+					delete(localExcluded, account.ID)
 				}
 			}
 			return s.newSelectionResult(ctx, account, false, nil, &AccountWaitPlan{
@@ -353,25 +357,10 @@ func (s *GatewayService) SelectAccountWithLoadAwareness(ctx context.Context, gro
 							}
 
 							if stickyCacheMissReason == "" {
-								waitingCount, _ := s.concurrencyService.GetAccountWaitingCount(ctx, stickyAccountID)
-								if waitingCount < cfg.StickySessionMaxWaiting {
-									// 会话数量限制检查（等待计划也需要占用会话配额）
-									if !s.checkAndRegisterSession(ctx, stickyAccount, sessionHash) {
-										stickyCacheMissReason = "session_limit"
-										// 会话限制已满，继续到负载感知选择
-									} else {
-										// 必须走 newSelectionResult 以 hydrate 账号凭证：
-										// 调度快照中的账号是精简版（OAuth token 等被剥离），
-										// 直接返回会导致后续转发缺少凭证而鉴权失败。
-										return s.newSelectionResult(ctx, stickyAccount, false, nil, &AccountWaitPlan{
-											AccountID:      stickyAccountID,
-											MaxConcurrency: stickyAccount.Concurrency,
-											Timeout:        cfg.StickySessionWaitTimeout,
-											MaxWaiting:     cfg.StickySessionMaxWaiting,
-										})
-									}
-								} else {
-									stickyCacheMissReason = "wait_queue_full"
+								// Sticky concurrency full: fall through to load-aware selection instead of waiting.
+								stickyCacheMissReason = "concurrency_full"
+								if s.cache != nil && sessionHash != "" {
+									_ = s.cache.DeleteSessionAccountID(ctx, derefGroupID(groupID), sessionHash)
 								}
 							}
 							// 粘性账号槽位满且等待队列已满，继续使用负载感知选择
@@ -478,7 +467,7 @@ func (s *GatewayService) SelectAccountWithLoadAwareness(ctx context.Context, gro
 					return s.newSelectionResult(ctx, item.account, false, nil, &AccountWaitPlan{
 						AccountID:      item.account.ID,
 						MaxConcurrency: item.account.Concurrency,
-						Timeout:        cfg.StickySessionWaitTimeout,
+						Timeout:        cfg.FallbackWaitTimeout,
 						MaxWaiting:     cfg.StickySessionMaxWaiting,
 					})
 				}
@@ -559,24 +548,9 @@ func (s *GatewayService) SelectAccountWithLoadAwareness(ctx context.Context, gro
 						)
 					}
 
-					waitingCount, _ := s.concurrencyService.GetAccountWaitingCount(ctx, accountID)
-					if waitingCount < cfg.StickySessionMaxWaiting {
-						// 会话数量限制检查（等待计划也需要占用会话配额）
-						if !s.checkAndRegisterSession(ctx, account, sessionHash) {
-							// 会话限制已满，继续到 Layer 2
-						} else {
-							slog.Debug("sticky.layer1_5_no_routing_hit",
-								"account_id", accountID,
-								"session", shortSessionHash(sessionHash),
-								"result", "wait_plan",
-							)
-							return s.newSelectionResult(ctx, account, false, nil, &AccountWaitPlan{
-								AccountID:      accountID,
-								MaxConcurrency: account.Concurrency,
-								Timeout:        cfg.StickySessionWaitTimeout,
-								MaxWaiting:     cfg.StickySessionMaxWaiting,
-							})
-						}
+					// Sticky concurrency full: fall through to Layer 2 instead of waiting.
+					if s.cache != nil && sessionHash != "" {
+						_ = s.cache.DeleteSessionAccountID(ctx, derefGroupID(groupID), sessionHash)
 					}
 				} else if !clearSticky {
 					slog.Debug("sticky.layer1_5_no_routing_miss",

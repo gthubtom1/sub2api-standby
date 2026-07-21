@@ -474,7 +474,7 @@ func estimateStandbyDeficit(pool []*Account, now time.Time, activeWindow, health
 	need := demand * standbyPerActive
 	verified := 0
 	for _, acc := range pool {
-		if acc == nil || isStandbyInUse(acc, now, activeWindow) || !acc.IsSchedulable() {
+		if acc == nil || isStandbyInUse(acc, now, activeWindow) || !isStandbyProbeEligible(acc) {
 			continue
 		}
 		if isStandbyRecentlyVerified(acc, now, healthTTL) {
@@ -537,7 +537,7 @@ func selectStandbyProbeCandidates(
 			continue
 		}
 		// Only probe accounts the scheduler can actually pick next.
-		if !acc.IsSchedulable() {
+		if !isStandbyProbeEligible(acc) {
 			continue
 		}
 		if isStandbyRecentlyVerified(acc, now, healthTTL) {
@@ -642,6 +642,22 @@ func isStandbyProbeFailCooldown(acc *Account, now time.Time, cooldown time.Durat
 		return false
 	}
 	return now.Sub(time.Unix(failAt, 0)) < cooldown
+}
+
+
+// isStandbyProbeEligible reports whether an idle account is worth probing as a
+// healthy standby. Account-level schedulable is required; Grok near-exhausted
+// quota windows are excluded so "预备健康" does not prefer soon-to-429 accounts.
+func isStandbyProbeEligible(acc *Account) bool {
+	if acc == nil || !acc.IsSchedulable() {
+		return false
+	}
+	if acc.IsGrok() {
+		if paused, _ := shouldAutoPauseGrokAccountByQuota(acc); paused {
+			return false
+		}
+	}
+	return true
 }
 
 func isStandbyInUse(acc *Account, now time.Time, activeWindow time.Duration) bool {

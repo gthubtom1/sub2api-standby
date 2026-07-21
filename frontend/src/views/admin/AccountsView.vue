@@ -1,4 +1,4 @@
-﻿<template>
+<template>
   <AppLayout>
     <TablePageLayout>
       <template #filters>

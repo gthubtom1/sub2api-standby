@@ -568,17 +568,17 @@ func TestShouldTriggerAntigravitySmartRetry(t *testing.T) {
 					"status": "RESOURCE_EXHAUSTED",
 					"details": [
 						{"@type": "type.googleapis.com/google.rpc.ErrorInfo", "metadata": {"model": "gemini-3-flash"}, "reason": "RATE_LIMIT_EXCEEDED"},
-						{"@type": "type.googleapis.com/google.rpc.RetryInfo", "retryDelay": "3s"}
+						{"@type": "type.googleapis.com/google.rpc.RetryInfo", "retryDelay": "2s"}
 					]
 				}
 			}`,
 			expectedShouldRetry:     true,
 			expectedShouldRateLimit: false,
-			minWait:                 3 * time.Second,
+			minWait:                 2 * time.Second,
 			modelName:               "gemini-3-flash",
 		},
 		{
-			name:    "OAuth account with long delay (>= 7s) - direct rate limit",
+			name:    "OAuth account with long delay (>= threshold) - direct rate limit",
 			account: oauthAccount,
 			body: `{
 				"error": {
@@ -626,7 +626,7 @@ func TestShouldTriggerAntigravitySmartRetry(t *testing.T) {
 			expectedShouldRateLimit: false,
 		},
 		{
-			name:    "OAuth account with exactly 7s delay - direct rate limit",
+			name:    "OAuth account with delay above threshold - direct rate limit",
 			account: oauthAccount,
 			body: `{
 				"error": {

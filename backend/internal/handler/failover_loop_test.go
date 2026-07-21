@@ -452,6 +452,21 @@ func TestHandleFailoverError_SameAccountRetry(t *testing.T) {
 // HandleFailoverError — TempUnschedule 调用验证
 // ---------------------------------------------------------------------------
 
+func TestHandleFailoverError_RateLimitSkipsSameAccountRetry(t *testing.T) {
+	// 429 must switch accounts immediately even when RetryableOnSameAccount is true.
+	mock := &mockTempUnscheduler{}
+	fs := NewFailoverState(5, false)
+	err := newTestFailoverErr(http.StatusTooManyRequests, true, false)
+
+	action := fs.HandleFailoverError(context.Background(), mock, 100, "openai", maxSameAccountRetries, err)
+	require.Equal(t, FailoverContinue, action)
+	require.Equal(t, 0, fs.SameAccountRetryCount[100], "429 must not same-account retry")
+	require.Equal(t, 1, fs.SwitchCount, "429 should switch immediately")
+	require.Contains(t, fs.FailedAccountIDs, int64(100))
+	// TempUnschedule still runs for RetryableOnSameAccount after skipping same-account retries.
+	require.Len(t, mock.calls, 1)
+}
+
 func TestHandleFailoverError_TempUnschedule(t *testing.T) {
 	t.Run("非重试错误不调用TempUnschedule", func(t *testing.T) {
 		mock := &mockTempUnscheduler{}

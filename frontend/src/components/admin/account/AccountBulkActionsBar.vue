@@ -1,4 +1,4 @@
-﻿<template>
+<template>
   <div class="mb-4 flex items-center justify-between rounded-lg bg-primary-50 p-3 dark:bg-primary-900/20">
     <div class="flex flex-wrap items-center gap-2">
       <span v-if="selectedIds.length > 0" class="text-sm font-medium text-primary-900 dark:text-primary-100">

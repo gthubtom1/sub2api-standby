@@ -12,6 +12,7 @@ package repository
 
 import (
 	"context"
+	"fmt"
 	"database/sql"
 	"encoding/json"
 	"errors"
@@ -721,6 +722,41 @@ func (r *accountRepository) List(ctx context.Context, params pagination.Paginati
 	return r.ListWithFilters(ctx, params, "", "", "", "", 0, "")
 }
 
+
+// accountHasActiveModelRateLimitSQL returns true when extra.model_rate_limits
+// contains any entry whose rate_limit_reset_at is still in the future.
+// Used so list filter "正常" excludes partially rate-limited multi-model accounts
+// (e.g. Grok soft 429 on one model) while "限流" includes them.
+func accountHasActiveModelRateLimitSQL(s *entsql.Selector) *entsql.Predicate {
+	extra := s.C(dbaccount.FieldExtra)
+	expr := fmt.Sprintf(
+		`EXISTS (
+			SELECT 1
+			FROM jsonb_each(COALESCE(%s->'model_rate_limits', '{}'::jsonb)) AS m(k, v)
+			WHERE NULLIF(m.v->>'rate_limit_reset_at', '') IS NOT NULL
+			  AND (m.v->>'rate_limit_reset_at') ~ '^[0-9]{4}-'
+			  AND (m.v->>'rate_limit_reset_at')::timestamptz > NOW()
+		)`, extra)
+	return entsql.P(func(b *entsql.Builder) {
+		b.WriteString(expr)
+	})
+}
+
+func accountNoActiveModelRateLimitSQL(s *entsql.Selector) *entsql.Predicate {
+	extra := s.C(dbaccount.FieldExtra)
+	expr := fmt.Sprintf(
+		`NOT EXISTS (
+			SELECT 1
+			FROM jsonb_each(COALESCE(%s->'model_rate_limits', '{}'::jsonb)) AS m(k, v)
+			WHERE NULLIF(m.v->>'rate_limit_reset_at', '') IS NOT NULL
+			  AND (m.v->>'rate_limit_reset_at') ~ '^[0-9]{4}-'
+			  AND (m.v->>'rate_limit_reset_at')::timestamptz > NOW()
+		)`, extra)
+	return entsql.P(func(b *entsql.Builder) {
+		b.WriteString(expr)
+	})
+}
+
 func (r *accountRepository) accountListFilteredQuery(platform, accountType, status, search string, groupID int64, privacyMode string) *dbent.AccountQuery {
 	q := r.client.Account.Query()
 
@@ -733,6 +769,9 @@ func (r *accountRepository) accountListFilteredQuery(platform, accountType, stat
 	if status != "" {
 		switch status {
 		case service.StatusActive:
+			// "正常": fully healthy for scheduling classification.
+			// Excludes account-level rate limits AND any active model_rate_limits
+			// (Grok soft per-model 429 must leave 正常 until the model window recovers).
 			q = q.Where(
 				dbaccount.StatusEQ(status),
 				dbaccount.SchedulableEQ(true),
@@ -747,16 +786,26 @@ func (r *accountRepository) accountListFilteredQuery(platform, accountType, stat
 						entsql.LTE(col, entsql.Expr("NOW()")),
 					))
 				}),
+				dbpredicate.Account(func(s *entsql.Selector) {
+					s.Where(accountNoActiveModelRateLimitSQL(s))
+				}),
 			)
 		case "rate_limited":
+			// "限流": account-level RateLimitResetAt OR any active model_rate_limits.
 			q = q.Where(
 				dbaccount.StatusEQ(service.StatusActive),
-				dbaccount.RateLimitResetAtGT(time.Now()),
 				dbpredicate.Account(func(s *entsql.Selector) {
 					col := s.C("temp_unschedulable_until")
 					s.Where(entsql.Or(
 						entsql.IsNull(col),
 						entsql.LTE(col, entsql.Expr("NOW()")),
+					))
+				}),
+				dbpredicate.Account(func(s *entsql.Selector) {
+					resetCol := s.C(dbaccount.FieldRateLimitResetAt)
+					s.Where(entsql.Or(
+						entsql.GT(resetCol, time.Now()),
+						accountHasActiveModelRateLimitSQL(s),
 					))
 				}),
 			)

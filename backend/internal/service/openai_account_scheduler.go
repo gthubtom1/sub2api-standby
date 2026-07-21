@@ -522,7 +522,7 @@ func (s *defaultOpenAIAccountScheduler) selectBySessionHash(
 	cfg := s.service.schedulingConfig()
 	// WaitPlan.MaxConcurrency 使用 Concurrency（非 EffectiveLoadFactor），因为 WaitPlan 控制的是 Redis 实际并发槽位等待。
 	if s.service.concurrencyService != nil {
-		if escapeCfg.enabled && acquireErr == nil && result != nil && !result.Acquired {
+		if acquireErr == nil && result != nil && !result.Acquired { // always escape sticky when concurrency full
 			errorRate, ttft, _ := s.stats.snapshot(accountID)
 			slog.Info("sticky_escape_triggered",
 				"account_id", accountID,
@@ -537,7 +537,7 @@ func (s *defaultOpenAIAccountScheduler) selectBySessionHash(
 			WaitPlan: &AccountWaitPlan{
 				AccountID:      accountID,
 				MaxConcurrency: account.Concurrency,
-				Timeout:        cfg.StickySessionWaitTimeout,
+				Timeout:        cfg.FallbackWaitTimeout,
 				MaxWaiting:     cfg.StickySessionMaxWaiting,
 			},
 		}, false, nil
@@ -1266,7 +1266,7 @@ func (s *defaultOpenAIAccountScheduler) tryFallbackToWeightedSticky(
 				WaitPlan: &AccountWaitPlan{
 					AccountID:      account.ID,
 					MaxConcurrency: account.Concurrency,
-					Timeout:        cfg.StickySessionWaitTimeout,
+					Timeout:        cfg.FallbackWaitTimeout,
 					MaxWaiting:     cfg.StickySessionMaxWaiting,
 				},
 			}, nil

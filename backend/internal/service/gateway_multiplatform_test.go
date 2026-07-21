@@ -2511,9 +2511,9 @@ func TestGatewayService_SelectAccountWithLoadAwareness(t *testing.T) {
 		result, err := svc.SelectAccountWithLoadAwareness(ctx, nil, "sticky", "claude-3-5-sonnet-20241022", nil, "", int64(0))
 		require.NoError(t, err)
 		require.NotNil(t, result)
+		// Sole schedulable sticky account still waits; multi-account pools escape instead.
 		require.NotNil(t, result.WaitPlan)
 		require.Equal(t, int64(1), result.Account.ID)
-		require.Equal(t, 0, concurrencyCache.loadBatchCalls)
 	})
 
 	t.Run("负载批量查询失败-降级旧顺序选择", func(t *testing.T) {
@@ -2606,8 +2606,13 @@ func TestGatewayService_SelectAccountWithLoadAwareness(t *testing.T) {
 		result, err := svc.SelectAccountWithLoadAwareness(ctx, &groupID, sessionHash, "claude-3-5-sonnet-20241022", nil, "", int64(0))
 		require.NoError(t, err)
 		require.NotNil(t, result)
-		require.NotNil(t, result.WaitPlan)
-		require.Equal(t, int64(1), result.Account.ID)
+		// Sticky concurrency full + free alternate account => escape sticky, do not wait 120s.
+		if result.WaitPlan != nil {
+			require.NotEqual(t, int64(1), result.WaitPlan.AccountID)
+		} else {
+			require.NotNil(t, result.Account)
+			require.NotEqual(t, int64(1), result.Account.ID)
+		}
 	})
 
 	t.Run("模型路由-粘性账号命中", func(t *testing.T) {

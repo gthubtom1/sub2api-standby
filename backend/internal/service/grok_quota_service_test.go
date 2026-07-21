@@ -869,9 +869,17 @@ func TestShouldAutoPauseGrokAccountByQuota(t *testing.T) {
 			want: true,
 		},
 		{
-			name: "preemptive utilization ninety percent",
+			name: "preemptive remaining one also hits utilization",
 			snapshot: xai.QuotaSnapshot{
 				Requests:  &xai.QuotaWindow{Limit: &limit, Remaining: int64PtrForGrokTest(1), ResetUnix: &resetFuture},
+				UpdatedAt: time.Now().UTC().Format(time.RFC3339),
+			},
+			want: true,
+		},
+		{
+			name: "preemptive utilization eighty percent",
+			snapshot: xai.QuotaSnapshot{
+				Requests:  &xai.QuotaWindow{Limit: &limit, Remaining: int64PtrForGrokTest(2), ResetUnix: &resetFuture},
 				UpdatedAt: time.Now().UTC().Format(time.RFC3339),
 			},
 			want: true,

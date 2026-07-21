@@ -109,6 +109,35 @@ func (r *grokCredentialHandlerRepo) SetTempUnschedulable(_ context.Context, id i
 	return nil
 }
 
+func (r *grokCredentialHandlerRepo) SetModelRateLimit(_ context.Context, id int64, scope string, resetAt time.Time, reason ...string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	// Soft model-scoped Grok 429 still marks the account as rate-limited for
+	// assertion purposes (admin list "限流"), while scheduling uses model keys.
+	r.rateLimitIDs = append(r.rateLimitIDs, id)
+	for i := range r.accounts {
+		if r.accounts[i].ID != id {
+			continue
+		}
+		if r.accounts[i].Extra == nil {
+			r.accounts[i].Extra = map[string]any{}
+		}
+		limits, _ := r.accounts[i].Extra["model_rate_limits"].(map[string]any)
+		if limits == nil {
+			limits = map[string]any{}
+			r.accounts[i].Extra["model_rate_limits"] = limits
+		}
+		entry := map[string]any{
+			"rate_limit_reset_at": resetAt.UTC().Format(time.RFC3339),
+		}
+		if len(reason) > 0 && strings.TrimSpace(reason[0]) != "" {
+			entry["reason"] = strings.TrimSpace(reason[0])
+		}
+		limits[scope] = entry
+	}
+	return nil
+}
+
 func (r *grokCredentialHandlerRepo) SetRateLimited(_ context.Context, id int64, resetAt time.Time) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()

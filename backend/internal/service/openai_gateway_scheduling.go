@@ -294,8 +294,10 @@ func grokQuotaRetryAfterActive(snapshot *xai.QuotaSnapshot, now time.Time) bool 
 const (
 	// Pause Grok accounts slightly before hard exhaustion so sticky/failover
 	// can move clients off near-empty windows without burning local retries.
+	// 0.80 is intentionally aggressive: UI billing % lags rate windows, and
+	// local clients (Codex etc.) have limited retries once 429 is visible.
 	grokPreemptiveRemainingThreshold   int64   = 1
-	grokPreemptiveUtilizationThreshold float64 = 0.90
+	grokPreemptiveUtilizationThreshold float64 = 0.80
 )
 
 func shouldAutoPauseGrokQuotaWindow(name string, window *xai.QuotaWindow, now time.Time) (bool, openAIQuotaAutoPauseDecision) {
@@ -828,16 +830,9 @@ func (s *OpenAIGatewayService) selectAccountWithLoadAwareness(ctx context.Contex
 		if err == nil && result != nil && result.Acquired {
 			return s.newAcquiredSelectionResult(ctx, account, result.ReleaseFunc)
 		}
-		if stickyAccountID > 0 && stickyAccountID == account.ID && s.concurrencyService != nil {
-			waitingCount, _ := s.concurrencyService.GetAccountWaitingCount(ctx, account.ID)
-			if waitingCount < cfg.StickySessionMaxWaiting {
-				return s.newSelectionResult(ctx, account, false, nil, &AccountWaitPlan{
-					AccountID:      account.ID,
-					MaxConcurrency: account.Concurrency,
-					Timeout:        cfg.StickySessionWaitTimeout,
-					MaxWaiting:     cfg.StickySessionMaxWaiting,
-				})
-			}
+		// Sticky concurrency full: drop sticky instead of waiting StickySessionWaitTimeout.
+		if stickyAccountID > 0 && stickyAccountID == account.ID {
+			_ = s.deleteStickySessionAccountID(ctx, groupID, sessionHash)
 		}
 		return s.newSelectionResult(ctx, account, false, nil, &AccountWaitPlan{
 			AccountID:      account.ID,
@@ -896,15 +891,9 @@ func (s *OpenAIGatewayService) selectAccountWithLoadAwareness(ctx context.Contex
 							return selection, nil
 						}
 
-						waitingCount, _ := s.concurrencyService.GetAccountWaitingCount(ctx, accountID)
-						if waitingCount < cfg.StickySessionMaxWaiting {
-							return s.newSelectionResult(ctx, account, false, nil, &AccountWaitPlan{
-								AccountID:      accountID,
-								MaxConcurrency: account.Concurrency,
-								Timeout:        cfg.StickySessionWaitTimeout,
-								MaxWaiting:     cfg.StickySessionMaxWaiting,
-							})
-						}
+						// Sticky concurrency full: drop binding and continue to load-aware selection.
+						// Waiting up to StickySessionWaitTimeout (default 120s) makes multi-account pools feel stuck.
+						_ = s.deleteStickySessionAccountID(ctx, groupID, sessionHash)
 					}
 				}
 			}
