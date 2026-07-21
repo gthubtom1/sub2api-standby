@@ -68,7 +68,7 @@ docker compose up -d
 
 ## 绝对禁止
 
-- 管理后台「检查更新 / 更新」（会拉官方 `Wei-Shaw/sub2api`）
+- ~~管理后台「立即更新」二进制通道~~ 已改为本仓库 Docker 热更新提示（不会再拉官方）
 - `weishaw/sub2api` 官方镜像
 - 在小内存机器上源码 `docker build`（慢且易 OOM）
 

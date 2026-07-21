@@ -49,7 +49,7 @@ func (s *updateServiceGitHubClientStub) FetchChecksumFile(context.Context, strin
 	panic("FetchChecksumFile should not be called when no update is available")
 }
 
-func TestUpdateServicePerformUpdateNoUpdateReturnsSentinel(t *testing.T) {
+func TestUpdateServicePerformUpdateDockerOnly(t *testing.T) {
 	svc := NewUpdateService(
 		&updateServiceCacheStub{},
 		&updateServiceGitHubClientStub{
@@ -65,8 +65,7 @@ func TestUpdateServicePerformUpdateNoUpdateReturnsSentinel(t *testing.T) {
 	err := svc.PerformUpdate(context.Background())
 
 	require.Error(t, err)
-	require.True(t, errors.Is(err, ErrNoUpdateAvailable))
-	require.ErrorIs(t, err, ErrNoUpdateAvailable)
+	require.ErrorIs(t, err, ErrDockerUpdateOnly)
 }
 
 func newRollbackTestService(current string, releases []*GitHubRelease) *UpdateService {
@@ -166,13 +165,12 @@ func TestUpdateServiceRollbackToVersionRejectsDisallowedTargets(t *testing.T) {
 		"9.9.9",    // nonexistent
 	} {
 		err := svc.RollbackToVersion(context.Background(), target)
-		require.ErrorIs(t, err, ErrRollbackVersionNotAllowed, "target %q should be rejected", target)
+		require.ErrorIs(t, err, ErrDockerUpdateOnly, "target %q should be rejected for docker-only channel", target)
 	}
 }
 
 func TestUpdateServiceRollbackToVersionAcceptsVPrefix(t *testing.T) {
-	// No platform asset in the release: the target passes the allowlist check
-	// and fails later at asset lookup, proving the version itself was accepted.
+	// Standby fork: any RollbackToVersion is rejected in favor of Docker pin/recreate.
 	releases := []*GitHubRelease{
 		{TagName: "v0.1.147"},
 		{TagName: "v0.1.146"},
@@ -181,7 +179,5 @@ func TestUpdateServiceRollbackToVersionAcceptsVPrefix(t *testing.T) {
 
 	err := svc.RollbackToVersion(context.Background(), "v0.1.146")
 
-	require.Error(t, err)
-	require.NotErrorIs(t, err, ErrRollbackVersionNotAllowed)
-	require.Contains(t, err.Error(), "no compatible release found")
+	require.ErrorIs(t, err, ErrDockerUpdateOnly)
 }

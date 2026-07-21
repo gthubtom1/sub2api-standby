@@ -291,6 +291,39 @@
                 </div>
               </div>
 
+              <!-- Standby fork: Docker hot-update (never official binary) -->
+              <div v-if="isReleaseBuild" class="space-y-2">
+                <div
+                  class="rounded-lg border border-emerald-200 bg-emerald-50 p-3 dark:border-emerald-800/50 dark:bg-emerald-900/20"
+                >
+                  <p class="text-sm font-medium text-emerald-700 dark:text-emerald-300">
+                    {{ t('version.dockerHotUpdateTitle') }}
+                  </p>
+                  <p class="mt-1 text-xs text-emerald-600/80 dark:text-emerald-400/80">
+                    {{ t('version.dockerHotUpdateHint') }}
+                  </p>
+                  <pre
+                    class="mt-2 overflow-x-auto rounded bg-white/70 p-2 text-[11px] leading-relaxed text-gray-700 dark:bg-dark-800/70 dark:text-dark-200"
+                  >{{ dockerHotUpdateCommand }}</pre>
+                  <button
+                    type="button"
+                    class="mt-2 flex w-full items-center justify-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-emerald-700"
+                    @click="handleUpdate"
+                  >
+                    {{ copied ? t('version.copied') : t('version.copyHotUpdate') }}
+                  </button>
+                  <a
+                    :href="`https://github.com/${GITHUB_REPO}`"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    class="mt-2 flex items-center justify-center gap-1 text-xs text-gray-500 transition-colors hover:text-gray-700 dark:text-dark-400 dark:hover:text-dark-200"
+                  >
+                    {{ GITHUB_REPO }}
+                    <Icon name="externalLink" size="xs" :stroke-width="2" />
+                  </a>
+                </div>
+              </div>
+
               <!-- Priority 4: Update available for release build - show update button -->
               <div v-else-if="hasUpdate && isReleaseBuild" class="space-y-2">
                 <!-- Update info card -->
@@ -642,7 +675,6 @@ import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore, useAppStore } from '@/stores'
 import {
-  performUpdate,
   restartService,
   getRollbackVersions,
   rollback as rollbackAPI,
@@ -651,9 +683,9 @@ import {
 import { useClipboard } from '@/composables/useClipboard'
 import Icon from '@/components/icons/Icon.vue'
 
-const GITHUB_REPO = 'Wei-Shaw/sub2api'
-// Docker Hub image published by CI (tags carry no "v" prefix, e.g. weishaw/sub2api:0.1.146)
-const DOCKER_IMAGE = 'weishaw/sub2api'
+const GITHUB_REPO = 'gthubtom1/sub2api-standby'
+// Standby fork GHCR image published by GitHub Actions (never official weishaw/sub2api).
+const DOCKER_IMAGE = 'ghcr.io/gthubtom1/sub2api-standby'
 
 const { t } = useI18n()
 
@@ -700,7 +732,7 @@ const { copied, copyToClipboard } = useClipboard()
 
 // Manual rollback methods differ by deployment: script installs use install.sh,
 // docker deployments pin the image tag instead
-const manualTab = ref<'script' | 'docker'>('script')
+const manualTab = ref<'script' | 'docker'>('docker')
 
 const manualTabs = computed(() => [
   { key: 'script' as const, label: t('version.deployScript') },
@@ -723,6 +755,15 @@ const dockerRollbackCommand = computed(() => {
     'docker compose up -d'
   ].join('\n')
 })
+
+// One-command hot update for this fork (GHCR pull + recreate). Prefer this over in-app binary update.
+const dockerHotUpdateCommand = computed(() =>
+  [
+    'cd /opt/sub2api-standby',
+    `docker pull ${DOCKER_IMAGE}:latest`,
+    'docker compose up -d'
+  ].join('\n')
+)
 
 const activeManualCommand = computed(() =>
   manualTab.value === 'docker' ? dockerRollbackCommand.value : scriptRollbackCommand.value
@@ -752,24 +793,17 @@ async function refreshVersion(force = true) {
 }
 
 async function handleUpdate() {
-  if (updating.value) return
-
-  updating.value = true
+  // Binary in-app update is disabled for the standby fork (would risk official binaries).
+  // Copy Docker hot-update commands for the operator to run on the host.
   updateError.value = ''
   updateSuccess.value = false
-
   try {
-    const result = await performUpdate()
+    await copyToClipboard(dockerHotUpdateCommand.value)
     successKind.value = 'update'
     updateSuccess.value = true
-    needRestart.value = result.need_restart
-    // Clear version cache to reflect update completed
-    appStore.clearVersionCache()
-  } catch (error: unknown) {
-    const err = error as { response?: { data?: { message?: string } }; message?: string }
-    updateError.value = err.response?.data?.message || err.message || t('version.updateFailed')
-  } finally {
-    updating.value = false
+    needRestart.value = false
+  } catch {
+    updateError.value = t('version.updateFailed')
   }
 }
 

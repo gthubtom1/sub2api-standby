@@ -25,12 +25,19 @@ import (
 var (
 	ErrNoUpdateAvailable         = infraerrors.Conflict("ALREADY_UP_TO_DATE", "no update available; current version is latest")
 	ErrRollbackVersionNotAllowed = infraerrors.BadRequest("ROLLBACK_VERSION_NOT_ALLOWED", "version is not in the allowed rollback list")
+	// Standby fork ships via GHCR only; in-app binary swap would pull wrong channel.
+	ErrDockerUpdateOnly = infraerrors.BadRequest(
+		"DOCKER_UPDATE_ONLY",
+		"standby fork uses Docker hot-update only: cd /opt/sub2api-standby && docker pull ghcr.io/gthubtom1/sub2api-standby:latest && docker compose up -d",
+	)
 )
 
 const (
 	updateCacheKey = "update_check_cache"
 	updateCacheTTL = 1200 // 20 minutes
-	githubRepo     = "Wei-Shaw/sub2api"
+	// Standby fork: never point update checks at official Wei-Shaw/sub2api.
+	githubRepo  = "gthubtom1/sub2api-standby"
+	dockerImage = "ghcr.io/gthubtom1/sub2api-standby"
 
 	// Security: allowed download domains for updates
 	allowedDownloadHost = "github.com"
@@ -163,16 +170,9 @@ func (s *UpdateService) CheckUpdate(ctx context.Context, force bool) (*UpdateInf
 // PerformUpdate downloads and applies the update
 // Uses atomic file replacement pattern for safe in-place updates
 func (s *UpdateService) PerformUpdate(ctx context.Context) error {
-	info, err := s.CheckUpdate(ctx, true)
-	if err != nil {
-		return err
-	}
-
-	if !info.HasUpdate {
-		return ErrNoUpdateAvailable
-	}
-
-	return s.applyReleaseAssets(ctx, info.ReleaseInfo.Assets)
+	// This fork is distributed as a prebuilt GHCR image. Never download/replace
+	// the binary in-place from GitHub Releases (that path is for official installs).
+	return ErrDockerUpdateOnly
 }
 
 // applyReleaseAssets downloads the platform archive from the given release assets,
@@ -327,6 +327,10 @@ func (s *UpdateService) ListRollbackVersions(ctx context.Context) ([]RollbackVer
 // The target must be one of the versions returned by ListRollbackVersions;
 // anything else (including the current version) is rejected.
 func (s *UpdateService) RollbackToVersion(ctx context.Context, version string) error {
+	return ErrDockerUpdateOnly
+}
+
+func (s *UpdateService) rollbackToVersionDisabled(ctx context.Context, version string) error {
 	target := strings.TrimPrefix(strings.TrimSpace(version), "v")
 	if target == "" {
 		return ErrRollbackVersionNotAllowed
@@ -402,7 +406,19 @@ func (s *UpdateService) fetchRollbackCandidates(ctx context.Context) ([]*GitHubR
 func (s *UpdateService) fetchLatestRelease(ctx context.Context) (*UpdateInfo, error) {
 	release, err := s.githubClient.FetchLatestRelease(ctx, githubRepo)
 	if err != nil {
-		return nil, err
+		// No GitHub Release assets on this fork: GHCR :latest is the update channel.
+		return &UpdateInfo{
+			CurrentVersion: s.currentVersion,
+			LatestVersion:  s.currentVersion,
+			HasUpdate:      false,
+			Warning:        "use Docker hot-update: docker pull " + dockerImage + ":latest && docker compose up -d",
+			BuildType:      s.buildType,
+			ReleaseInfo: &ReleaseInfo{
+				Name:    "Docker channel",
+				HTMLURL: "https://github.com/" + githubRepo,
+				Body:    "Image: " + dockerImage + ":latest",
+			},
+		}, nil
 	}
 
 	latestVersion := strings.TrimPrefix(release.TagName, "v")
