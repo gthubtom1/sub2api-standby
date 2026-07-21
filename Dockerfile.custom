@@ -32,6 +32,18 @@ FROM ${POSTGRES_IMAGE} AS pg-client
 FROM ${ALPINE_IMAGE}
 RUN apk add --no-cache ca-certificates tzdata su-exec libpq zstd-libs lz4-libs krb5-libs libldap libedit curl wget \
   && rm -rf /var/cache/apk/*
+# Static Docker CLI + Compose plugin: one-click hot-update talks to host via docker.sock
+RUN curl -fsSL https://download.docker.com/linux/static/stable/x86_64/docker-27.5.1.tgz \
+      | tar -xz -C /tmp \
+  && mv /tmp/docker/docker /usr/local/bin/docker \
+  && chmod +x /usr/local/bin/docker \
+  && rm -rf /tmp/docker \
+  && mkdir -p /usr/local/lib/docker/cli-plugins \
+  && curl -fsSL -o /usr/local/lib/docker/cli-plugins/docker-compose \
+       https://github.com/docker/compose/releases/download/v2.32.4/docker-compose-linux-x86_64 \
+  && chmod +x /usr/local/lib/docker/cli-plugins/docker-compose \
+  && /usr/local/bin/docker --version \
+  && /usr/local/bin/docker compose version
 COPY --from=pg-client /usr/local/bin/pg_dump /usr/local/bin/pg_dump
 COPY --from=pg-client /usr/local/bin/psql /usr/local/bin/psql
 COPY --from=pg-client /usr/local/lib/libpq.so.5* /usr/local/lib/
