@@ -11,7 +11,7 @@ if [ "$(id -u)" = "0" ]; then
 
     # One-click Docker hot-update: allow sub2api to talk to host docker.sock.
     if [ -S /var/run/docker.sock ]; then
-        DOCKER_GID="$(stat -c '%g' /var/run/docker.sock 2>/dev/null || stat -f '%g' /var/run/docker.sock 2>/dev/null || true)"
+        DOCKER_GID="$(stat -c '%g' /var/run/docker.sock 2>/dev/null || true)"
         if [ -n "$DOCKER_GID" ] && [ "$DOCKER_GID" != "0" ]; then
             if ! getent group "$DOCKER_GID" >/dev/null 2>&1; then
                 addgroup -g "$DOCKER_GID" dockerhost 2>/dev/null || true
@@ -21,7 +21,6 @@ if [ "$(id -u)" = "0" ]; then
                 addgroup sub2api "$DOCKER_GROUP" 2>/dev/null || true
             fi
         else
-            # root-owned socket: grant group-readable via docker group if present
             chmod 666 /var/run/docker.sock 2>/dev/null || true
         fi
     fi
@@ -30,6 +29,10 @@ if [ "$(id -u)" = "0" ]; then
     # also runs under the correct user.
     exec su-exec sub2api "$0" "$@"
 fi
+
+# Writable docker config dir for non-root user (compose plugin metadata).
+export DOCKER_CONFIG="${DOCKER_CONFIG:-/tmp/docker-config}"
+mkdir -p "$DOCKER_CONFIG" 2>/dev/null || true
 
 # Compatibility: if the first arg looks like a flag (e.g. --help),
 # prepend the default binary so it behaves the same as the old
