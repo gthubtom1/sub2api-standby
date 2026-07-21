@@ -60,6 +60,7 @@ func TestUpdateServicePerformUpdateDockerOnly(t *testing.T) {
 		},
 		"0.1.132",
 		"release",
+		"",
 	)
 
 	err := svc.PerformUpdate(context.Background())
@@ -74,6 +75,7 @@ func newRollbackTestService(current string, releases []*GitHubRelease) *UpdateSe
 		&updateServiceGitHubClientStub{recentReleases: releases},
 		current,
 		"release",
+		"",
 	)
 }
 
@@ -136,6 +138,7 @@ func TestUpdateServiceListRollbackVersionsPropagatesFetchError(t *testing.T) {
 		&updateServiceGitHubClientStub{recentErr: errors.New("github unavailable")},
 		"0.1.147",
 		"release",
+		"",
 	)
 
 	_, err := svc.ListRollbackVersions(context.Background())

@@ -8,7 +8,7 @@ ARG GOPROXY=https://proxy.golang.org,direct
 ARG GOSUMDB=sum.golang.org
 
 FROM ${GOLANG_IMAGE} AS backend-builder
-ARG VERSION=0.1.157-standby
+ARG VERSION=0.1.157-standby+local
 ARG COMMIT=local-standby
 ARG DATE
 ARG GOPROXY

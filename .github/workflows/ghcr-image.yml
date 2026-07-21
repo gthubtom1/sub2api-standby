@@ -59,6 +59,17 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Set image version
+        id: ver
+        run: |
+          SHORT_SHA="${GITHUB_SHA:0:7}"
+          if [ "${{ github.ref_type }}" = "tag" ]; then
+            echo "version=${{ github.ref_name }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "version=0.1.157-standby+${SHORT_SHA}" >> "$GITHUB_OUTPUT"
+          fi
+          echo "commit=${GITHUB_SHA}" >> "$GITHUB_OUTPUT"
+
       - name: Docker metadata
         id: meta
         uses: docker/metadata-action@v5
@@ -80,8 +91,8 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
-            VERSION=${{ github.ref_type == 'tag' && github.ref_name || '0.1.157-standby' }}
-            COMMIT=${{ github.sha }}
+            VERSION=${{ steps.ver.outputs.version }}
+            COMMIT=${{ steps.ver.outputs.commit }}
             GOPROXY=https://proxy.golang.org,direct
             GOSUMDB=sum.golang.org
           cache-from: type=gha

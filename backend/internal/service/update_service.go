@@ -9,6 +9,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"io"
 	"net/url"
 	"os"
@@ -72,15 +73,17 @@ type UpdateService struct {
 	githubClient   GitHubReleaseClient
 	currentVersion string
 	buildType      string // "source" for manual builds, "release" for CI builds
+	commit         string // git SHA embedded at build time (full or short)
 }
 
 // NewUpdateService creates a new UpdateService
-func NewUpdateService(cache UpdateCache, githubClient GitHubReleaseClient, version, buildType string) *UpdateService {
+func NewUpdateService(cache UpdateCache, githubClient GitHubReleaseClient, version, buildType, commit string) *UpdateService {
 	return &UpdateService{
 		cache:          cache,
 		githubClient:   githubClient,
 		currentVersion: version,
 		buildType:      buildType,
+		commit:         strings.TrimSpace(commit),
 	}
 }
 
@@ -138,6 +141,13 @@ type GitHubAsset struct {
 
 // CheckUpdate checks for available updates
 func (s *UpdateService) CheckUpdate(ctx context.Context, force bool) (*UpdateInfo, error) {
+	// Standby fork: when Docker hot-update is configured, compare git commits so
+	// "refresh latest" actually detects new GHCR builds even if the base version
+	// string (e.g. 0.1.157-standby) stays the same.
+	if dockerUpdateConfigured() {
+		return s.checkDockerChannelUpdate(ctx, force)
+	}
+
 	// Try cache first
 	if !force {
 		if cached, err := s.getFromCache(ctx); err == nil && cached != nil {
@@ -154,8 +164,8 @@ func (s *UpdateService) CheckUpdate(ctx context.Context, force bool) (*UpdateInf
 			return cached, nil
 		}
 		return &UpdateInfo{
-			CurrentVersion: s.currentVersion,
-			LatestVersion:  s.currentVersion,
+			CurrentVersion: s.displayVersion(s.currentVersion, s.commit),
+			LatestVersion:  s.displayVersion(s.currentVersion, s.commit),
 			HasUpdate:      false,
 			Warning:        err.Error(),
 			BuildType:      s.buildType,
@@ -165,6 +175,151 @@ func (s *UpdateService) CheckUpdate(ctx context.Context, force bool) (*UpdateInf
 	// Cache result
 	s.saveToCache(ctx, info)
 	return info, nil
+}
+
+// checkDockerChannelUpdate reports whether main branch (GHCR rebuild source) is
+// ahead of the commit embedded in the running binary.
+func (s *UpdateService) checkDockerChannelUpdate(ctx context.Context, force bool) (*UpdateInfo, error) {
+	if !force {
+		if cached, err := s.getFromCache(ctx); err == nil && cached != nil {
+			return cached, nil
+		}
+	}
+
+	current := s.displayVersion(s.currentVersion, s.commit)
+	remoteSHA, publishedAt, err := s.fetchRemoteMainCommit(ctx)
+	if err != nil {
+		if cached, cacheErr := s.getFromCache(ctx); cacheErr == nil && cached != nil {
+			cached.Warning = "Using cached data: " + err.Error()
+			return cached, nil
+		}
+		return &UpdateInfo{
+			CurrentVersion: current,
+			LatestVersion:  current,
+			HasUpdate:      false,
+			Warning:        "check remote failed: " + err.Error(),
+			BuildType:      s.buildType,
+			ReleaseInfo: &ReleaseInfo{
+				Name:    "Docker channel",
+				HTMLURL: "https://github.com/" + githubRepo,
+				Body:    "Image: " + dockerImage + ":latest",
+			},
+		}, nil
+	}
+
+	latest := s.displayVersion(standbyBaseVersion(s.currentVersion), remoteSHA)
+	hasUpdate := !commitsMatch(s.commit, remoteSHA)
+	info := &UpdateInfo{
+		CurrentVersion: current,
+		LatestVersion:  latest,
+		HasUpdate:      hasUpdate,
+		BuildType:      s.buildType,
+		ReleaseInfo: &ReleaseInfo{
+			Name:        "Docker channel · main",
+			Body:        "Image: " + dockerImage + ":latest\nCommit: " + shortCommit(remoteSHA),
+			PublishedAt: publishedAt,
+			HTMLURL:     "https://github.com/" + githubRepo + "/commit/" + remoteSHA,
+		},
+	}
+	if !hasUpdate {
+		info.Warning = "已是最新镜像通道版本（commit 一致）；仍可点「立即更新」强制 pull"
+	} else {
+		info.Warning = "检测到新提交，点「立即更新」pull GHCR 镜像后「立即重启」"
+	}
+	s.saveToCache(ctx, info)
+	return info, nil
+}
+
+func (s *UpdateService) displayVersion(base, commit string) string {
+	base = strings.TrimSpace(base)
+	if base == "" {
+		base = "0.1.157-standby"
+	}
+	// Drop existing +commit suffix so we re-attach cleanly.
+	if i := strings.Index(base, "+"); i >= 0 {
+		base = base[:i]
+	}
+	short := shortCommit(commit)
+	if short == "" {
+		return base
+	}
+	return base + "+" + short
+}
+
+func standbyBaseVersion(v string) string {
+	v = strings.TrimSpace(v)
+	if v == "" {
+		return "0.1.157-standby"
+	}
+	if i := strings.Index(v, "+"); i >= 0 {
+		v = v[:i]
+	}
+	return v
+}
+
+func shortCommit(commit string) string {
+	commit = strings.TrimSpace(commit)
+	if commit == "" || strings.EqualFold(commit, "unknown") || strings.EqualFold(commit, "local-standby") {
+		return ""
+	}
+	if len(commit) > 7 {
+		return commit[:7]
+	}
+	return commit
+}
+
+func commitsMatch(local, remote string) bool {
+	local = strings.ToLower(strings.TrimSpace(local))
+	remote = strings.ToLower(strings.TrimSpace(remote))
+	if local == "" || remote == "" || local == "unknown" || local == "local-standby" {
+		return false
+	}
+	if local == remote {
+		return true
+	}
+	// Accept short/full SHA prefix match (min 7 chars).
+	if len(local) >= 7 && len(remote) >= 7 {
+		if strings.HasPrefix(remote, local) || strings.HasPrefix(local, remote) {
+			return true
+		}
+	}
+	return false
+}
+
+func (s *UpdateService) fetchRemoteMainCommit(ctx context.Context) (sha string, publishedAt string, err error) {
+	url := "https://api.github.com/repos/" + githubRepo + "/commits/main"
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return "", "", err
+	}
+	req.Header.Set("Accept", "application/vnd.github+json")
+	req.Header.Set("User-Agent", "sub2api-standby-update-check")
+
+	client := &http.Client{Timeout: 15 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", "", err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
+		return "", "", fmt.Errorf("github commits API status %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
+	}
+	var payload struct {
+		SHA    string `json:"sha"`
+		Commit struct {
+			Committer struct {
+				Date string `json:"date"`
+			} `json:"committer"`
+		} `json:"commit"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
+		return "", "", err
+	}
+	if strings.TrimSpace(payload.SHA) == "" {
+		return "", "", fmt.Errorf("github commits API returned empty sha")
+	}
+	return payload.SHA, payload.Commit.Committer.Date, nil
 }
 
 // PerformUpdate downloads and applies the update
@@ -410,9 +565,14 @@ func (s *UpdateService) fetchLatestRelease(ctx context.Context) (*UpdateInfo, er
 	release, err := s.githubClient.FetchLatestRelease(ctx, githubRepo)
 	if err != nil {
 		// No GitHub Release assets on this fork: GHCR :latest is the update channel.
+		// Prefer commit-based docker channel when possible.
+		if dockerUpdateConfigured() {
+			return s.checkDockerChannelUpdate(ctx, true)
+		}
+		cur := s.displayVersion(s.currentVersion, s.commit)
 		return &UpdateInfo{
-			CurrentVersion: s.currentVersion,
-			LatestVersion:  s.currentVersion,
+			CurrentVersion: cur,
+			LatestVersion:  cur,
 			HasUpdate:      false,
 			Warning:        "use Docker hot-update: docker pull " + dockerImage + ":latest && docker compose up -d",
 			BuildType:      s.buildType,
@@ -674,10 +834,22 @@ func compareVersions(current, latest string) int {
 
 func parseVersion(v string) [3]int {
 	v = strings.TrimPrefix(v, "v")
+	if i := strings.Index(v, "+"); i >= 0 {
+		v = v[:i]
+	}
 	parts := strings.Split(v, ".")
 	result := [3]int{0, 0, 0}
 	for i := 0; i < len(parts) && i < 3; i++ {
-		if parsed, err := strconv.Atoi(parts[i]); err == nil {
+		part := parts[i]
+		// Allow suffixes like 157-standby / 157-standby+abc by taking leading digits.
+		j := 0
+		for j < len(part) && part[j] >= '0' && part[j] <= '9' {
+			j++
+		}
+		if j == 0 {
+			continue
+		}
+		if parsed, err := strconv.Atoi(part[:j]); err == nil {
 			result[i] = parsed
 		}
 	}
