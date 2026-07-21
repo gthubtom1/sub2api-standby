@@ -473,6 +473,7 @@ func (s *defaultOpenAIAccountScheduler) selectBySessionHash(
 	}
 	if req.ExcludedIDs != nil {
 		if _, excluded := req.ExcludedIDs[accountID]; excluded {
+			_ = s.service.deleteStickySessionAccountID(ctx, req.GroupID, sessionHash)
 			return nil, false, nil
 		}
 	}

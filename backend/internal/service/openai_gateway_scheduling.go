@@ -250,7 +250,10 @@ type openAIQuotaAutoPauseDecision struct {
 }
 
 func shouldAutoPauseGrokAccountByQuota(account *Account) (bool, openAIQuotaAutoPauseDecision) {
-	if account == nil || !account.IsGrok() || account.Type != AccountTypeOAuth {
+	// Any Grok account with a fresh quota snapshot can be paused early, including
+	// API-key accounts. Soft model-scoped 429s are handled separately via
+	// model_rate_limits; this path covers request/token window exhaustion risk.
+	if account == nil || !account.IsGrok() {
 		return false, openAIQuotaAutoPauseDecision{}
 	}
 	snapshot, err := grokQuotaSnapshotFromExtra(account.Extra)
@@ -288,6 +291,13 @@ func grokQuotaRetryAfterActive(snapshot *xai.QuotaSnapshot, now time.Time) bool 
 	return now.Before(retryAfterUntil)
 }
 
+const (
+	// Pause Grok accounts slightly before hard exhaustion so sticky/failover
+	// can move clients off near-empty windows without burning local retries.
+	grokPreemptiveRemainingThreshold   int64   = 1
+	grokPreemptiveUtilizationThreshold float64 = 0.90
+)
+
 func shouldAutoPauseGrokQuotaWindow(name string, window *xai.QuotaWindow, now time.Time) (bool, openAIQuotaAutoPauseDecision) {
 	if window == nil || window.Limit == nil || window.Remaining == nil || *window.Limit <= 0 {
 		return false, openAIQuotaAutoPauseDecision{}
@@ -296,8 +306,12 @@ func shouldAutoPauseGrokQuotaWindow(name string, window *xai.QuotaWindow, now ti
 		return false, openAIQuotaAutoPauseDecision{}
 	}
 	utilization := float64(*window.Limit-*window.Remaining) / float64(*window.Limit)
-	if *window.Remaining <= 0 || utilization >= 1 {
-		return true, openAIQuotaAutoPauseDecision{window: name, threshold: 1, utilization: utilization}
+	if *window.Remaining <= grokPreemptiveRemainingThreshold || utilization >= grokPreemptiveUtilizationThreshold {
+		return true, openAIQuotaAutoPauseDecision{
+			window:      name,
+			threshold:   grokPreemptiveUtilizationThreshold,
+			utilization: utilization,
+		}
 	}
 	return false, openAIQuotaAutoPauseDecision{}
 }
@@ -635,6 +649,9 @@ func (s *OpenAIGatewayService) tryStickySessionHit(ctx context.Context, groupID 
 	}
 
 	if _, excluded := excludedIDs[accountID]; excluded {
+		// Sticky pointed at an account already failed in this request: drop the
+		// binding immediately so the next hop cannot re-hit the same dead account.
+		_ = s.deleteStickySessionAccountID(ctx, groupID, sessionHash)
 		return nil
 	}
 

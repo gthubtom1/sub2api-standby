@@ -2181,3 +2181,77 @@ func TestIsGrokImageGenerationModel(t *testing.T) {
 		})
 	}
 }
+
+
+func TestHandleGrokAccountUpstreamError429ModelScopedSoftLimit(t *testing.T) {
+	// Soft 429: model known and windows still have remaining -> model-scoped only.
+	now := time.Now()
+	requestReset := now.Add(5 * time.Minute).Truncate(time.Second)
+	headers := http.Header{
+		"Retry-After":                    []string{"45"},
+		"X-Ratelimit-Limit-Requests":     []string{"10"},
+		"X-Ratelimit-Remaining-Requests": []string{"3"},
+		"X-Ratelimit-Reset-Requests":     []string{fmt.Sprintf("%d", requestReset.Unix())},
+		"X-Ratelimit-Limit-Tokens":       []string{"1000"},
+		"X-Ratelimit-Remaining-Tokens":   []string{"500"},
+		"X-Ratelimit-Reset-Tokens":       []string{fmt.Sprintf("%d", requestReset.Unix())},
+	}
+	account := &Account{ID: 701, Platform: PlatformGrok, Type: AccountTypeOAuth}
+	repo := &grokQuotaAccountRepo{}
+	svc := &OpenAIGatewayService{accountRepo: repo}
+	before := time.Now()
+
+	svc.handleGrokAccountUpstreamError(context.Background(), account, http.StatusTooManyRequests, headers, nil, "grok-4.5")
+
+	require.Equal(t, 0, repo.rateLimitedCalls, "soft model 429 must not account-level rate limit")
+	require.Equal(t, 1, repo.modelRateLimitCalls)
+	require.Equal(t, "grok-4.5", repo.lastModelScope)
+	require.WithinDuration(t, before.Add(45*time.Second), repo.lastModelResetAt, 2*time.Second)
+	require.Equal(t, "grok_429", repo.lastModelReason)
+	require.Nil(t, account.RateLimitResetAt)
+	// Model limit should be visible via model_rate_limits / remaining time.
+	require.Greater(t, account.GetRateLimitRemainingTimeWithContext(context.Background(), "grok-4.5"), time.Duration(0))
+	require.Equal(t, time.Duration(0), account.GetRateLimitRemainingTimeWithContext(context.Background(), "grok-3"))
+}
+
+func TestHandleGrokAccountUpstreamError429AccountLevelWhenWindowsExhausted(t *testing.T) {
+	now := time.Now()
+	tokenReset := now.Add(20 * time.Minute).Truncate(time.Second)
+	headers := http.Header{
+		"X-Ratelimit-Limit-Requests":     []string{"10"},
+		"X-Ratelimit-Remaining-Requests": []string{"0"},
+		"X-Ratelimit-Reset-Requests":     []string{fmt.Sprintf("%d", tokenReset.Unix())},
+		"X-Ratelimit-Limit-Tokens":       []string{"1000"},
+		"X-Ratelimit-Remaining-Tokens":   []string{"0"},
+		"X-Ratelimit-Reset-Tokens":       []string{fmt.Sprintf("%d", tokenReset.Unix())},
+	}
+	account := &Account{ID: 702, Platform: PlatformGrok, Type: AccountTypeOAuth}
+	repo := &grokQuotaAccountRepo{}
+	svc := &OpenAIGatewayService{accountRepo: repo}
+
+	svc.handleGrokAccountUpstreamError(context.Background(), account, http.StatusTooManyRequests, headers, nil, "grok-4.5")
+
+	require.Equal(t, 1, repo.rateLimitedCalls)
+	require.Equal(t, 1, repo.modelRateLimitCalls)
+	require.Equal(t, "grok-4.5", repo.lastModelScope)
+	require.WithinDuration(t, tokenReset, repo.lastRateLimitResetAt, time.Second)
+}
+
+func TestShouldClearStickySession_GrokPreemptiveQuota(t *testing.T) {
+	limit := int64(10)
+	remaining := int64(1)
+	resetFuture := time.Now().Add(time.Minute).Unix()
+	account := &Account{
+		Status:      StatusActive,
+		Schedulable: true,
+		Platform:    PlatformGrok,
+		Type:        AccountTypeOAuth,
+		Extra: map[string]any{
+			grokQuotaSnapshotExtraKey: xai.QuotaSnapshot{
+				Requests:  &xai.QuotaWindow{Limit: &limit, Remaining: &remaining, ResetUnix: &resetFuture},
+				UpdatedAt: time.Now().UTC().Format(time.RFC3339),
+			},
+		},
+	}
+	require.True(t, shouldClearStickySession(account, "grok-4.5"))
+}

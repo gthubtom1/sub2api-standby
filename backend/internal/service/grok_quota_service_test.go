@@ -28,6 +28,10 @@ type grokQuotaAccountRepo struct {
 	rateLimitedCalls      int
 	lastRateLimitedID     int64
 	lastRateLimitResetAt  time.Time
+	modelRateLimitCalls   int
+	lastModelScope        string
+	lastModelResetAt      time.Time
+	lastModelReason       string
 	tempUnschedCalls      int
 	lastTempUnschedID     int64
 	lastTempUnschedUntil  time.Time
@@ -56,6 +60,18 @@ func (r *grokQuotaAccountRepo) SetRateLimited(_ context.Context, id int64, reset
 
 func (r *grokQuotaAccountRepo) SetRateLimitedIfLater(ctx context.Context, id int64, resetAt time.Time) error {
 	return r.SetRateLimited(ctx, id, resetAt)
+}
+
+func (r *grokQuotaAccountRepo) SetModelRateLimit(_ context.Context, _ int64, scope string, resetAt time.Time, reason ...string) error {
+	r.modelRateLimitCalls++
+	r.lastModelScope = scope
+	r.lastModelResetAt = resetAt
+	if len(reason) > 0 {
+		r.lastModelReason = reason[0]
+	} else {
+		r.lastModelReason = ""
+	}
+	return nil
 }
 
 func (r *grokQuotaAccountRepo) ClearRateLimitIfObserved(_ context.Context, _ int64, observedLimitedAt, observedResetAt time.Time) (bool, error) {
@@ -844,6 +860,30 @@ func TestShouldAutoPauseGrokAccountByQuota(t *testing.T) {
 			},
 			want: false,
 		},
+		{
+			name: "preemptive remaining one",
+			snapshot: xai.QuotaSnapshot{
+				Requests:  &xai.QuotaWindow{Limit: &limit, Remaining: int64PtrForGrokTest(1), ResetUnix: &resetFuture},
+				UpdatedAt: time.Now().UTC().Format(time.RFC3339),
+			},
+			want: true,
+		},
+		{
+			name: "preemptive utilization ninety percent",
+			snapshot: xai.QuotaSnapshot{
+				Requests:  &xai.QuotaWindow{Limit: &limit, Remaining: int64PtrForGrokTest(1), ResetUnix: &resetFuture},
+				UpdatedAt: time.Now().UTC().Format(time.RFC3339),
+			},
+			want: true,
+		},
+		{
+			name: "below preemptive threshold",
+			snapshot: xai.QuotaSnapshot{
+				Requests:  &xai.QuotaWindow{Limit: &limit, Remaining: int64PtrForGrokTest(3), ResetUnix: &resetFuture},
+				UpdatedAt: time.Now().UTC().Format(time.RFC3339),
+			},
+			want: false,
+		},
 	}
 
 	for _, tt := range tests {
@@ -861,4 +901,28 @@ func TestShouldAutoPauseGrokAccountByQuota(t *testing.T) {
 			require.Equal(t, tt.want, got)
 		})
 	}
+}
+
+
+func int64PtrForGrokTest(v int64) *int64 {
+	return &v
+}
+
+func TestShouldAutoPauseGrokAccountByQuota_APIKeyWithSnapshot(t *testing.T) {
+	t.Parallel()
+	limit := int64(10)
+	remaining := int64(1)
+	resetFuture := time.Now().Add(time.Minute).Unix()
+	account := &Account{
+		Platform: PlatformGrok,
+		Type:     AccountTypeAPIKey,
+		Extra: map[string]any{
+			grokQuotaSnapshotExtraKey: xai.QuotaSnapshot{
+				Requests:  &xai.QuotaWindow{Limit: &limit, Remaining: &remaining, ResetUnix: &resetFuture},
+				UpdatedAt: time.Now().UTC().Format(time.RFC3339),
+			},
+		},
+	}
+	got, _ := shouldAutoPauseGrokAccountByQuota(account)
+	require.True(t, got)
 }

@@ -195,6 +195,7 @@ func (h *OpenAIGatewayHandler) AlphaSearch(c *gin.Context) {
 		}
 		h.gatewayService.RecordOpenAIAccountSwitch()
 		failedAccountIDs[account.ID] = struct{}{}
+		h.gatewayService.ClearStickySession(c.Request.Context(), apiKey.GroupID, sessionHash)
 		lastFailoverErr = failoverErr
 		if switchCount >= h.maxAccountSwitches {
 			h.handleFailoverExhausted(c, failoverErr, false)

@@ -506,6 +506,11 @@ func shouldClearStickySession(account *Account, requestedModel string) bool {
 	if remaining := account.GetRateLimitRemainingTimeWithContext(context.Background(), requestedModel); remaining > 0 {
 		return true
 	}
+	// Grok preemptive quota pause is not always reflected in RateLimitResetAt
+	// (soft remaining windows), but sticky must still release the account.
+	if paused, _ := shouldAutoPauseGrokAccountByQuota(account); paused {
+		return true
+	}
 	return false
 }
 

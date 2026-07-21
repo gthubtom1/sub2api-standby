@@ -199,6 +199,16 @@ func (s *OpenAIGatewayService) refreshStickySessionTTL(ctx context.Context, grou
 	return err
 }
 
+
+// ClearStickySession drops the sticky binding for a group/session immediately.
+// Used on upstream failover so the next selection cannot re-hit a just-failed account.
+func (s *OpenAIGatewayService) ClearStickySession(ctx context.Context, groupID *int64, sessionHash string) {
+	if s == nil || strings.TrimSpace(sessionHash) == "" {
+		return
+	}
+	_ = s.deleteStickySessionAccountID(ctx, groupID, sessionHash)
+}
+
 func (s *OpenAIGatewayService) deleteStickySessionAccountID(ctx context.Context, groupID *int64, sessionHash string) error {
 	if s == nil || s.cache == nil {
 		return nil
