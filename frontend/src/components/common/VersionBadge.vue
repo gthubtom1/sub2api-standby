@@ -892,7 +892,7 @@ async function handleRollback() {
     const result = await rollbackAPI(selectedRollbackVersion.value)
     successKind.value = 'rollback'
     updateSuccess.value = true
-    needRestart.value = result.need_restart
+    needRestart.value = result.need_restart !== false
     rollbackPanelOpen.value = false
     // Clear version cache so the next check reflects the rolled-back version
     appStore.clearVersionCache()
