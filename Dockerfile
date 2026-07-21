@@ -109,9 +109,20 @@ RUN apk add --no-cache \
     krb5-libs \
     libldap \
     libedit \
-    docker-cli \
-    docker-cli-compose \
-    && rm -rf /var/cache/apk/*
+    curl \
+    && rm -rf /var/cache/apk/* \
+    # Static Docker CLI + Compose plugin for one-click hot-update via host docker.sock
+    && curl -fsSL https://download.docker.com/linux/static/stable/x86_64/docker-27.5.1.tgz \
+      | tar -xz -C /tmp \
+    && mv /tmp/docker/docker /usr/local/bin/docker \
+    && chmod +x /usr/local/bin/docker \
+    && rm -rf /tmp/docker \
+    && mkdir -p /usr/local/lib/docker/cli-plugins \
+    && curl -fsSL -o /usr/local/lib/docker/cli-plugins/docker-compose \
+      https://github.com/docker/compose/releases/download/v2.32.4/docker-compose-linux-x86_64 \
+    && chmod +x /usr/local/lib/docker/cli-plugins/docker-compose \
+    && docker --version \
+    && docker compose version
 
 # Copy pg_dump and psql from the same postgres image used in docker-compose
 # This ensures version consistency between backup tools and the database server
